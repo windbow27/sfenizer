@@ -56,12 +56,13 @@ def to_csa(board):
     return "\n".join(csa_lines)
 
 # --- Model and transform setup ---
-classes = [
-    'B_black', 'B_white', 'G_black', 'G_white', 'K_black', 'K_white', 'L_black', 'L_white',
-    'N_black', 'N_white', 'P_black', 'P_white', 'R_black', 'R_white', 'S_black', 'S_white', 'empty',
-    '+B_black', '+B_white', '+L_black', '+L_white', '+N_black', '+N_white', '+P_black', '+P_white',
-    '+R_black', '+R_white', '+S_black', '+S_white'
-]
+classes = ['+B_black', '+B_white', '+L_black', '+L_white', '+N_black', 
+           '+N_white', '+P_black', '+P_white', '+R_black', '+R_white', 
+           '+S_black', '+S_white', 'B_black', 'B_white', 'G_black', 
+           'G_white', 'K_black', 'K_white', 'L_black', 'L_white', 
+           'N_black', 'N_white', 'P_black', 'P_white', 'R_black', 
+           'R_white', 'S_black', 'S_white', 'empty']
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = models.resnet18(weights=None)
 model.fc = nn.Linear(model.fc.in_features, len(classes))
