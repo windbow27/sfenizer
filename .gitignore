@@ -1,0 +1,6 @@
+/__pycache__
+/.venv
+labeled_cells
+shogi_cells
+notebook.ipynb
+sfennizer.pth
