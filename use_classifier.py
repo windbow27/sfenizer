@@ -66,7 +66,7 @@ classes = ['+B_black', '+B_white', '+L_black', '+L_white', '+N_black',
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = models.resnet18(weights=None)
 model.fc = nn.Linear(model.fc.in_features, len(classes))
-model.load_state_dict(torch.load("sfennizer.pth", map_location=device))
+model.load_state_dict(torch.load("sfenizer.pth", map_location=device))
 model = model.to(device)
 model.eval()
 

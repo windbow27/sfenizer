@@ -72,8 +72,8 @@ for epoch in range(epochs):
             pred = model(xb)
             val_correct += (pred.argmax(dim=1) == yb).sum().item()
     val_acc = val_correct / len(val_ds)
-    print(f"🔵 Val Accuracy: {val_acc*100:.2f}%")
+    print(f"[INFO] Val Accuracy: {val_acc*100:.2f}%")
     scheduler.step()
 
-torch.save(model.state_dict(), "sfennizer.pth")
+torch.save(model.state_dict(), "sfenizer.pth")
 print("[SUCCESS] Model saved!")

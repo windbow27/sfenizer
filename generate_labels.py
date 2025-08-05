@@ -4,6 +4,7 @@ import os
 from PIL import Image
 from IPython.display import display
 import ipywidgets as widgets
+import random
 
 def detect_board(image_path, debug=False):
     img = cv2.imread(image_path)
@@ -115,17 +116,16 @@ def label_cells(cell_dir="shogi_cells", labeled_dir="labeled_cells"):
         nonlocal index
         label = label_input.value.strip()
         if not label:
-            print("[Warning] Please enter a label.")
-            return
+            label = "empty"
         label_path = os.path.join(labeled_dir, label)
         os.makedirs(label_path, exist_ok=True)
         base_name = os.path.splitext(cell_files[index])[0]
         ext = os.path.splitext(cell_files[index])[1]
-        i = 1
-        new_name = f"{base_name}{ext}"
-        while os.path.exists(os.path.join(label_path, new_name)):
-            new_name = f"{base_name}_{i}{ext}"
-            i += 1
+        while True:
+            rand_num = random.randint(1000, 9999)
+            new_name = f"{base_name}_{rand_num}{ext}"
+            if not os.path.exists(os.path.join(label_path, new_name)):
+                break
         src = os.path.join(cell_dir, cell_files[index])
         dst = os.path.join(label_path, new_name)
         os.rename(src, dst)
