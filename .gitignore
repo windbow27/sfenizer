@@ -4,3 +4,7 @@ labeled_cells
 shogi_cells
 notebook.ipynb
 sfenizer.pth
+
+deploy.sh
+update.sh
+.env

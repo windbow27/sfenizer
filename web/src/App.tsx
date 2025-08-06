@@ -1,17 +1,48 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, Image, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Camera, Upload, Image, X, Check, Copy } from 'lucide-react';
+import { Button } from './components/ui/button';
+import { Card, CardContent } from './components/ui/card';
+import { toast } from 'sonner';
 
 interface FileHandler {
   (file: File): void;
 }
 
+interface ConversionResult {
+  success: boolean;
+  sfen: string;
+  csa: string;
+  board: string[][];
+}
+
 const App: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [result, setResult] = useState<ConversionResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [copiedSfen, setCopiedSfen] = useState<boolean>(false);
+  const [copiedCsa, setCopiedCsa] = useState<boolean>(false);
+
+  const copyToClipboard = async (text: string, type: 'sfen' | 'csa') => {
+    try {
+      await navigator.clipboard.writeText(text);
+
+      if (type === 'sfen') {
+        setCopiedSfen(true);
+        setTimeout(() => setCopiedSfen(false), 2000);
+      } else {
+        setCopiedCsa(true);
+        setTimeout(() => setCopiedCsa(false), 2000);
+      }
+
+      toast.success(`${type.toUpperCase()} copied to clipboard!`);
+    } catch {
+      toast.error('Failed to copy to clipboard');
+    }
+  };
 
   const handleDrag = (e: React.DragEvent<HTMLDivElement>): void => {
     e.preventDefault();
@@ -35,6 +66,7 @@ const App: React.FC = () => {
 
   const handleFiles: FileHandler = (file: File): void => {
     if (file && file.type.startsWith('image/')) {
+      setSelectedFile(file);
       const reader = new FileReader();
       reader.onload = (e: ProgressEvent<FileReader>) => {
         if (e.target?.result) {
@@ -42,6 +74,7 @@ const App: React.FC = () => {
         }
       };
       reader.readAsDataURL(file);
+      setResult(null);
     }
   };
 
@@ -64,15 +97,45 @@ const App: React.FC = () => {
     }
   };
 
-  const handleConvert = (): void => {
-    if (selectedImage) {
-      console.log('Converting image...');
-      // Add your conversion logic here
+  const handleConvert = async (): Promise<void> => {
+    if (!selectedFile) {
+      toast.error('No image selected');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      const API_BASE_URL = import.meta.env.PROD ? '/api' : 'http://localhost:8000';
+
+      const response = await fetch(`${API_BASE_URL}/convert`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Conversion failed');
+      }
+
+      const data: ConversionResult = await response.json();
+      setResult(data);
+      toast.success('Board converted successfully!');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const clearImage = (): void => {
     setSelectedImage(null);
+    setSelectedFile(null);
+    setResult(null);
   };
 
   return (
@@ -82,7 +145,7 @@ const App: React.FC = () => {
         <div className='mx-auto max-w-7xl px-4 sm:px-6 lg:px-8'>
           <div className='flex h-16 items-center justify-between'>
             <div className='flex items-center'>
-              {/* <h1 className='text-xl font-semibold text-foreground'>VSC87</h1> */}
+              <h1 className='text-xl font-semibold text-foreground'>Sfenizer</h1>
             </div>
           </div>
         </div>
@@ -131,10 +194,10 @@ const App: React.FC = () => {
                       <Image className='h-6 w-6 text-muted-foreground' />
                     </div>
                     <div className='space-y-2'>
-                      <p className='text-lg font-medium text-foreground'>Drop your image here</p>
-                      <p className='text-sm text-muted-foreground'>
-                        Or use one of the options below
+                      <p className='text-lg font-medium text-foreground'>
+                        Drop your shogi board image here
                       </p>
+                      <p className='text-sm text-muted-foreground'>Or just Ctrl +V, all works</p>
                     </div>
 
                     <div className='flex flex-wrap justify-center gap-3'>
@@ -182,10 +245,67 @@ const App: React.FC = () => {
           </Card>
 
           <div className='flex justify-center'>
-            <Button onClick={handleConvert} disabled={!selectedImage} size='lg' className='px-8'>
-              Convert
+            <Button
+              onClick={handleConvert}
+              disabled={!selectedFile || isLoading}
+              size='lg'
+              className='px-8'>
+              {isLoading ? 'Converting...' : 'Convert to SFEN/CSA'}
             </Button>
           </div>
+
+          {/* Results Display */}
+          {result && (
+            <Card>
+              <CardContent className='p-6'>
+                <div className='space-y-4'>
+                  <h3 className='text-lg font-semibold'>Conversion Results</h3>
+
+                  <div className='space-y-3'>
+                    <div>
+                      <div className='flex items-center justify-between mb-2'>
+                        <label className='text-sm font-medium text-muted-foreground'>SFEN:</label>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          onClick={() => copyToClipboard(result.sfen, 'sfen')}
+                          className='h-8 w-8 p-0'>
+                          {copiedSfen ? (
+                            <Check className='h-4 w-4 text-success' />
+                          ) : (
+                            <Copy className='h-4 w-4' />
+                          )}
+                        </Button>
+                      </div>
+                      <div className='p-3 bg-muted rounded-md font-mono text-sm break-all'>
+                        {result.sfen}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className='flex items-center justify-between mb-2'>
+                        <label className='text-sm font-medium text-muted-foreground'>CSA:</label>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          onClick={() => copyToClipboard(result.csa, 'csa')}
+                          className='h-8 w-8 p-0'>
+                          {copiedCsa ? (
+                            <Check className='h-4 w-4 text-success' />
+                          ) : (
+                            <Copy className='h-4 w-4' />
+                          )}
+                        </Button>
+                      </div>
+                      <div className='p-3 bg-muted rounded-md font-mono text-sm whitespace-pre-wrap'>
+                        {result.csa}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
