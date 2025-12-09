@@ -8,3 +8,7 @@ sfenizer.pth
 deploy.sh
 update.sh
 .env
+
+data
+manual_images
+work_dirs
