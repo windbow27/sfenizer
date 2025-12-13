@@ -17,7 +17,7 @@ class ShogiBoardMapper:
         self.calibration_confidence = 0.0
         self.last_calibration_pieces = {}
         
-        # Mapping YOLO classes to SFEN pieces
+        # shogi piece class to SFEN character mapping
         self.class_map = {
             'L_black': 'L', 'L_white': 'l',
             'N_black': 'N', 'N_white': 'n',
@@ -29,7 +29,7 @@ class ShogiBoardMapper:
             'P_black': 'P', 'P_white': 'p',
         }
         
-        # Known starting positions for Shogi pieces (col, row) in 9x9 grid
+        # starting positions 
         self.starting_positions = {
             'L_white': [(0, 0), (8, 0)],
             'L_black': [(0, 8), (8, 8)],
@@ -226,31 +226,39 @@ class StateStabilizer:
     def __init__(self, buffer_len=10, threshold=0.5):
         self.buffer = deque(maxlen=buffer_len)
         self.threshold = threshold
+        self.last_valid_sfen = None
 
-    def update(self, sfen):
+    def update(self, sfen, is_valid=True):
+        """Update buffer and return stable state."""
         self.buffer.append(sfen)
         if len(self.buffer) < self.buffer.maxlen:
             return None
         
         most_common, count = Counter(self.buffer).most_common(1)[0]
         if count / len(self.buffer) >= self.threshold:
+            if is_valid:
+                self.last_valid_sfen = most_common
             return most_common
         return None
+    
+    def get_last_valid(self):
+        """Return last validated stable state."""
+        return self.last_valid_sfen
 
 # ==========================================
 # 3. SHOGI ENGINE INTEGRATION
 # ==========================================
 class ShogiEngine:
     """
-    Wrapper for Shogi engine (YaneuraOu or Fairy-Stockfish).
-    Communicates via USI protocol.
+    Wrapper for Shogi engine 
     """
     def __init__(self, engine_path=None):
-        self.engine_path = engine_path or "fairy-stockfish"  # or path to YaneuraOu
+        self.engine_path = engine_path or "fairy-stockfish"
         self.process = None
         self.move_queue = queue.Queue()
-        self.best_move = None
-        self.evaluation = None
+        self.best_moves = []
+        self.evaluations = []
+        self.current_turn = 'b'
         
     def start(self):
         """Start the engine process."""
@@ -264,9 +272,9 @@ class ShogiEngine:
                 bufsize=1
             )
             
-            # Initialize engine
             self._send_command("usi")
             self._wait_for("usiok")
+            self._send_command("setoption name MultiPV value 3")
             self._send_command("isready")
             self._wait_for("readyok")
             
@@ -290,36 +298,53 @@ class ShogiEngine:
                 if expected in line:
                     return line
     
-    def analyze_position(self, sfen, time_ms=1000):
+    def analyze_position(self, sfen, time_ms=1000, turn='b'):
         """
-        Analyze position and get best move.
-        Runs in separate thread to avoid blocking.
+        Analyze position and get top 3 moves for current player.
         """
+        self.current_turn = turn
+        
         def _analyze():
             try:
-                # Set position
-                self._send_command(f"position sfen {sfen}")
+                self.best_moves = []
+                self.evaluations = []
                 
-                # Start search
+                self._send_command(f"position sfen {sfen} {turn} - 1")
                 self._send_command(f"go movetime {time_ms}")
                 
-                # Read engine output
+                temp_moves = {}
+                
                 while True:
                     line = self.process.stdout.readline().strip()
                     
                     if "bestmove" in line:
-                        parts = line.split()
-                        if len(parts) >= 2:
-                            self.best_move = parts[1]
                         break
                     
-                    # Parse evaluation
-                    if "score cp" in line:
+                    if "multipv" in line and "pv" in line:
                         try:
-                            cp_idx = line.split().index("cp")
-                            self.evaluation = int(line.split()[cp_idx + 1])
+                            parts = line.split()
+                            multipv_idx = parts.index("multipv")
+                            pv_idx = parts.index("pv")
+                            
+                            multipv_num = int(parts[multipv_idx + 1])
+                            move = parts[pv_idx + 1]
+                            
+                            eval_score = None
+                            if "score cp" in line:
+                                cp_idx = parts.index("cp")
+                                eval_score = int(parts[cp_idx + 1])
+                                if turn == 'w':
+                                    eval_score = -eval_score
+                            
+                            temp_moves[multipv_num] = (move, eval_score)
                         except:
                             pass
+                
+                for i in range(1, 4):
+                    if i in temp_moves:
+                        move, eval_score = temp_moves[i]
+                        self.best_moves.append(move)
+                        self.evaluations.append(eval_score)
                             
             except Exception as e:
                 print(f"Engine analysis error: {e}")
@@ -327,13 +352,17 @@ class ShogiEngine:
         thread = threading.Thread(target=_analyze, daemon=True)
         thread.start()
     
-    def get_best_move(self):
-        """Get the best move (if available)."""
-        return self.best_move
+    def get_best_moves(self):
+        """Get the top 3 moves (if available)."""
+        return self.best_moves
     
-    def get_evaluation(self):
-        """Get position evaluation in centipawns."""
-        return self.evaluation
+    def get_evaluations(self):
+        """Get position evaluations for top moves."""
+        return self.evaluations
+    
+    def get_current_turn(self):
+        """Get whose turn it is being analyzed."""
+        return self.current_turn
     
     def stop(self):
         """Stop the engine."""
@@ -343,7 +372,7 @@ class ShogiEngine:
             self.process = None
 
 # ==========================================
-# 4. HELPER: GRID TO SFEN
+# 4. HELPER: GRID TO SFEN & VALIDATION
 # ==========================================
 def grid_to_sfen(grid_dict):
     """Converts a dict {(col, row): 'P'} into an SFEN string."""
@@ -365,57 +394,110 @@ def grid_to_sfen(grid_dict):
         sfen_rows.append(row_str)
     return "/".join(sfen_rows)
 
-def draw_engine_suggestions(frame, mapper, best_move, evaluation):
-    """Draw engine suggestions on the frame."""
-    if not best_move or mapper.inv_homography_matrix is None:
-        return
+def is_valid_transition(prev_sfen, new_sfen):
+    """
+    Check if new_sfen is reachable from prev_sfen in one legal move.
+    Returns (is_valid, error_message, turn, move_usi)
+    """
+    if not prev_sfen or not new_sfen:
+        return True, "No previous state", None, None
+    
+    if prev_sfen == new_sfen:
+        return True, "Same state", None, None
     
     try:
-        # Parse USI move (e.g., "7g7f")
-        if len(best_move) >= 4:
-            from_col = 9 - int(best_move[0])
-            from_row = ord(best_move[1]) - ord('a')
-            to_col = 9 - int(best_move[2])
-            to_row = ord(best_move[3]) - ord('a')
+        for turn in ['b', 'w']:
+            board = shogi.Board(f"{prev_sfen} {turn} - 1")
+            legal_moves = list(board.legal_moves)
             
-            # Convert to pixel coordinates
-            from_x = (from_col + 0.5) * mapper.cell_w
-            from_y = (from_row + 0.5) * mapper.cell_h
-            to_x = (to_col + 0.5) * mapper.cell_w
-            to_y = (to_row + 0.5) * mapper.cell_h
-            
-            # Transform back to image space
-            from_pt = cv2.perspectiveTransform(
-                np.array([[[from_x, from_y]]], dtype='float32'),
-                mapper.inv_homography_matrix
-            )[0][0]
-            
-            to_pt = cv2.perspectiveTransform(
-                np.array([[[to_x, to_y]]], dtype='float32'),
-                mapper.inv_homography_matrix
-            )[0][0]
-            
-            # Draw arrow
-            cv2.arrowedLine(frame, 
-                          (int(from_pt[0]), int(from_pt[1])),
-                          (int(to_pt[0]), int(to_pt[1])),
-                          (0, 255, 0), 4, tipLength=0.3)
-            
-            # Draw move text
-            cv2.putText(frame, best_move, 
-                       (int(to_pt[0]) + 10, int(to_pt[1]) - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            for move in legal_moves:
+                test_board = shogi.Board(board.sfen())
+                test_board.push(move)
+                result_sfen = test_board.sfen().split()[0]
+                
+                if result_sfen == new_sfen:
+                    player = "Black" if turn == 'b' else "White"
+                    next_turn = 'w' if turn == 'b' else 'b'
+                    return True, f"Valid move: {move.usi()} ({player})", next_turn, move.usi()
+        
+        return False, "Not reachable in 1 move", None, None
+        
     except Exception as e:
-        print(f"Error drawing move: {e}")
+        return False, f"Validation error: {str(e)}", None, None
+
+def detect_incomplete_board(grid_dict):
+    """
+    Check if detected board is missing critical pieces.
+    Returns (is_complete, missing_count)
+    """
+    has_black_king = 'K' in [p for p in grid_dict.values()]
+    has_white_king = 'k' in [p for p in grid_dict.values()]
+    
+    if not has_black_king or not has_white_king:
+        return False, "Missing king(s)"
+    
+    total_pieces = len(grid_dict)
+    if total_pieces < 15:
+        return False, f"Only {total_pieces} pieces detected"
+    
+    return True, "Complete"
+
+def draw_engine_suggestions(frame, mapper, best_moves, evaluations, turn):
+    """Draw top 3 engine suggestions on the frame."""
+    if not best_moves or mapper.inv_homography_matrix is None:
+        return
+    
+    colors = [(0, 255, 0), (0, 200, 255), (0, 150, 255)]
+    player_text = "Black" if turn == 'b' else "White"
+    
+    cv2.putText(frame, f"Turn: {player_text}", (20, 180), 
+               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    
+    for idx, (best_move, color) in enumerate(zip(best_moves[:3], colors)):
+        try:
+            if len(best_move) >= 4:
+                from_col = 9 - int(best_move[0])
+                from_row = ord(best_move[1]) - ord('a')
+                to_col = 9 - int(best_move[2])
+                to_row = ord(best_move[3]) - ord('a')
+                
+                from_x = (from_col + 0.5) * mapper.cell_w
+                from_y = (from_row + 0.5) * mapper.cell_h
+                to_x = (to_col + 0.5) * mapper.cell_w
+                to_y = (to_row + 0.5) * mapper.cell_h
+                
+                from_pt = cv2.perspectiveTransform(
+                    np.array([[[from_x, from_y]]], dtype='float32'),
+                    mapper.inv_homography_matrix
+                )[0][0]
+                
+                to_pt = cv2.perspectiveTransform(
+                    np.array([[[to_x, to_y]]], dtype='float32'),
+                    mapper.inv_homography_matrix
+                )[0][0]
+                
+                thickness = 4 - idx
+                cv2.arrowedLine(frame, 
+                              (int(from_pt[0]), int(from_pt[1])),
+                              (int(to_pt[0]), int(to_pt[1])),
+                              color, thickness, tipLength=0.3)
+                
+                eval_text = f" ({evaluations[idx]})" if idx < len(evaluations) and evaluations[idx] is not None else ""
+                text = f"{idx+1}. {best_move}{eval_text}"
+                cv2.putText(frame, text, 
+                           (int(to_pt[0]) + 10, int(to_pt[1]) - 10 - (idx * 25)),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+        except Exception as e:
+            print(f"Error drawing move {idx+1}: {e}")
 
 # ==========================================
 # 5. MAIN EXECUTION LOOP
 # ==========================================
 def main():
     # SETUP
-    video_path = 'vid/VID_20251211_231620.mp4' 
-    model_path = 'work_dirs/yolov10_shogi9/weights/best.pt'
-    engine_path = None  # Set to path of YaneuraOu or use "fairy-stockfish" if installed
+    video_path = 'vid/board_07.mp4' 
+    model_path = 'runs/detect/train9/weights/best.pt'
+    engine_path = None
     
     cap = cv2.VideoCapture(video_path)
     model = YOLO(model_path)
@@ -423,13 +505,19 @@ def main():
     stabilizer = StateStabilizer(buffer_len=12, threshold=0.6)
     engine = ShogiEngine(engine_path)
     
-    # Start engine
     use_engine = engine.start()
+    
+    output_file = open('sfen_predictions.txt', 'w')
+    output_file.write("Frame | Raw SFEN | Stable SFEN | Valid Transition | Turn | Best Moves | Evaluations | Detections\n")
+    output_file.write("="*140 + "\n")
     
     frame_count = 0
     recalibration_interval = 30
     use_dynamic_calibration = True
     last_stable_sfen = None
+    last_validated_sfen = None
+    current_turn = 'b'
+    last_analyzed_state = None
     
     print("Starting processing... Press 'q' to quit.")
     print(f"Calibration mode: {'Dynamic (Multi-piece)' if use_dynamic_calibration else 'Static (4-lance)'}")
@@ -442,8 +530,7 @@ def main():
         
         frame_count += 1
             
-        # Run YOLO
-        results = model.predict(frame, conf=0.1, verbose=False)
+        results = model.predict(frame, conf=0.1, verbose=False)  
         boxes = results[0].boxes.xyxy.cpu().numpy()
         classes = results[0].boxes.cls.cpu().numpy()
         names = model.names
@@ -471,7 +558,6 @@ def main():
                     if cv2.waitKey(1) & 0xFF == ord('q'): break
                     continue
         
-        # Periodic recalibration check
         if use_dynamic_calibration and frame_count % recalibration_interval == 0:
             if mapper.should_recalibrate(boxes, classes, names):
                 print(">>> BOARD MOVEMENT DETECTED - RECALIBRATING <<<")
@@ -483,46 +569,115 @@ def main():
 
         # 3. MAP PIECES
         current_grid = {}
+        detections = []
         for box, cls_idx in zip(boxes, classes):
             x1, y1, x2, y2 = box
             cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
             
             grid_pos = mapper.get_grid_pos(cx, cy)
+            cls_name = names[int(cls_idx)]
             
             if grid_pos:
-                cls_name = names[int(cls_idx)]
                 sfen_char = mapper.class_map.get(cls_name, '?')
                 current_grid[grid_pos] = sfen_char
+                detections.append(f"{cls_name}@{grid_pos}")
                 
                 cv2.putText(frame, sfen_char, (int(cx)-10, int(cy)), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+            else:
+                detections.append(f"{cls_name}@({int(cx)},{int(cy)})")
+
+        is_complete, completeness_msg = detect_incomplete_board(current_grid)
+        
+        if not is_complete:
+            cv2.putText(frame, f"Incomplete board: {completeness_msg}", (20, 210), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
+            
+            last_valid = stabilizer.get_last_valid()
+            if last_valid:
+                cv2.putText(frame, "Using last valid state", (20, 240), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                
+                if use_engine and engine.get_best_moves():
+                    draw_engine_suggestions(frame, mapper, engine.get_best_moves(), 
+                                          engine.get_evaluations(), current_turn)
 
         # 4. GENERATE SFEN
         raw_sfen = grid_to_sfen(current_grid)
         
         # 5. STABILIZE
-        stable_sfen = stabilizer.update(raw_sfen)
+        stable_sfen = stabilizer.update(raw_sfen, is_valid=is_complete)
 
-        # 6. ENGINE ANALYSIS
-        if use_engine and stable_sfen and stable_sfen != last_stable_sfen:
-            # New stable position detected - analyze it
-            full_sfen = f"{stable_sfen} b - 1"  # Add turn and move number
-            engine.analyze_position(full_sfen, time_ms=500)
-            last_stable_sfen = stable_sfen
-            print(f"Analyzing: {stable_sfen}")
+        # 6. VALIDATE TRANSITION
+        is_valid = False
+        validation_msg = "N/A"
+        detected_move = None
         
-        # Draw engine suggestions
-        if use_engine:
-            best_move = engine.get_best_move()
-            evaluation = engine.get_evaluation()
+        if stable_sfen and stable_sfen != last_stable_sfen and is_complete:
+            is_valid, validation_msg, next_turn, detected_move = is_valid_transition(
+                last_validated_sfen, stable_sfen
+            )
             
-            if best_move:
-                draw_engine_suggestions(frame, mapper, best_move, evaluation)
+            if is_valid and next_turn:
+                last_validated_sfen = stable_sfen
+                last_stable_sfen = stable_sfen
+                print(f"✓ Valid transition: {validation_msg}")
+                print(f"Turn changed: {current_turn} -> {next_turn}")
+                current_turn = next_turn
+            elif not last_validated_sfen:
+                # First state - initialize
+                last_validated_sfen = stable_sfen
+                last_stable_sfen = stable_sfen
+                is_valid = True
+                validation_msg = "Initial state"
+                print(f"Initial position set: {stable_sfen[:30]}...")
+            else:
+                print(f"✗ Invalid transition: {validation_msg}")
+                cv2.putText(frame, f"INVALID STATE: {validation_msg}", (20, 150), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+        # 7. ENGINE ANALYSIS
+        best_moves_str = "N/A"
+        eval_str = "N/A"
+        
+        should_analyze = (
+            use_engine and 
+            stable_sfen and 
+            is_complete and
+            is_valid and
+            stable_sfen != last_analyzed_state
+        )
+        
+        if should_analyze:
+            full_sfen = f"{stable_sfen}"
+            player = "Black" if current_turn == 'b' else "White"
+            print(f"Analyzing for {player}'s turn: {stable_sfen[:40]}...")
+            engine.analyze_position(full_sfen, time_ms=500, turn=current_turn)
+            last_analyzed_state = stable_sfen
+        
+        if use_engine:
+            best_moves = engine.get_best_moves()
+            evaluations = engine.get_evaluations()
+            
+            if best_moves:
+                best_moves_str = ", ".join(best_moves)
+                eval_str = ", ".join([str(e) if e is not None else "N/A" for e in evaluations])
                 
-                # Display engine info
-                eval_text = f"Eval: {evaluation}" if evaluation else "Analyzing..."
-                cv2.putText(frame, f"Best: {best_move} | {eval_text}", (20, 120), 
+                draw_engine_suggestions(frame, mapper, best_moves, evaluations, current_turn)
+                
+                if evaluations and evaluations[0] is not None:
+                    eval_text = f"Eval: {evaluations[0]}"
+                else:
+                    eval_text = "Analyzing..."
+                
+                cv2.putText(frame, f"Best: {best_moves[0]} | {eval_text}", (20, 120), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        # Write to file
+        detections_str = ", ".join(detections) if detections else "None"
+        stable_sfen_str = stable_sfen if stable_sfen else "Stabilizing..."
+        turn_str = "Black" if current_turn == 'b' else "White"
+        output_file.write(f"{frame_count} | {raw_sfen} | {stable_sfen_str} | {validation_msg} | {turn_str} | {best_moves_str} | {eval_str} | {detections_str}\n")
 
         # Display Stats
         cv2.putText(frame, f"Raw: {raw_sfen[:30]}...", (20, 30), 
@@ -543,10 +698,13 @@ def main():
             break
 
     # Cleanup
+    output_file.close()
     cap.release()
     cv2.destroyAllWindows()
     if use_engine:
         engine.stop()
+    
+    print(f"\n>>> Output saved to sfen_predictions.txt <<<")
 
 if __name__ == "__main__":
     main()
