@@ -17,7 +17,7 @@ class ShogiBoardMapper:
         self.calibration_confidence = 0.0
         self.last_calibration_pieces = {}
         
-        # shogi piece class to SFEN character mapping
+        # Shogi piece class to SFEN 
         self.class_map = {
             'L_black': 'L', 'L_white': 'l',
             'N_black': 'N', 'N_white': 'n',
@@ -29,7 +29,7 @@ class ShogiBoardMapper:
             'P_black': 'P', 'P_white': 'p',
         }
         
-        # starting positions 
+        # Starting positions 
         self.starting_positions = {
             'L_white': [(0, 0), (8, 0)],
             'L_black': [(0, 8), (8, 8)],

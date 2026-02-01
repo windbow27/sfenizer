@@ -13,7 +13,7 @@ class StateStabilizer:
         self.buffer.append(current_frame_fen)
         
         if len(self.buffer) < self.buffer.maxlen:
-            return None # Wait for buffer to fill
+            return None 
 
         # Find most common board state
         most_common, count = Counter(self.buffer).most_common(1)[0]
