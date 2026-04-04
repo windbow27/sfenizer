@@ -50,7 +50,7 @@ const NavBar: React.FC = () => {
 
           {/* Right side placeholder + mobile hamburger */}
           <div className='flex items-center gap-2'>
-            <span className='hidden sm:block text-xs text-muted-foreground'>v2</span>
+            {/* <span className='hidden sm:block text-xs text-muted-foreground'>v2</span> */}
             <Button
               variant='ghost'
               size='sm'
