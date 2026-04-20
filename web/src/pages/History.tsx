@@ -1,26 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Copy, Check, Clock } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Trash2, Copy, Check, Clock, LogIn } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
 import { getHistory, removeFromHistory, clearHistory, type HistoryItem } from '../lib/history';
+import { useAuth } from '../lib/auth';
+import { formatRelativeTime } from '../lib/dates';
 
 const RelativeTime: React.FC<{ timestamp: number }> = ({ timestamp }) => {
-  const diff = Date.now() - timestamp;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  let label: string;
-  if (minutes < 1) label = 'just now';
-  else if (minutes < 60) label = `${minutes}m ago`;
-  else if (hours < 24) label = `${hours}h ago`;
-  else label = `${days}d ago`;
-
   return (
     <span className='inline-flex items-center gap-1 text-xs text-muted-foreground'>
       <Clock className='h-3 w-3' />
-      {label}
+      {formatRelativeTime(timestamp)}
     </span>
   );
 };
@@ -129,21 +121,109 @@ const HistoryCard: React.FC<{
 
 const History: React.FC = () => {
   const [items, setItems] = useState<HistoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
   useEffect(() => {
-    setItems(getHistory());
-  }, []);
+    if (!isAuthenticated) {
+      setItems([]);
+      setLoadError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    let active = true;
+    setIsLoading(true);
+    getHistory()
+      .then((historyItems) => {
+        if (active) {
+          setItems(historyItems);
+          setLoadError(null);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setLoadError(error instanceof Error ? error.message : 'Failed to load history');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated]);
+
+  if (isAuthLoading || isLoading) {
+    return (
+      <div className='py-8 md:py-10 max-w-2xl page-enter'>
+        <Card className='animate-pulse'>
+          <CardContent className='p-6'>
+            <div className='h-5 w-32 rounded bg-muted mb-4' />
+            <div className='h-24 rounded bg-muted' />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className='py-8 md:py-10 max-w-2xl page-enter'>
+        <Card className='border-dashed animate-fade-up'>
+          <CardContent className='p-6 text-center space-y-4'>
+            <Clock className='h-12 w-12 mx-auto opacity-20' />
+            <div className='space-y-1'>
+              <h1 className='text-xl font-bold text-foreground'>History is saved on the server</h1>
+              <p className='text-sm text-muted-foreground'>
+                Sign in to see your conversions and keep them across sessions.
+              </p>
+            </div>
+            <Button asChild className='gap-2'>
+              <Link to='/login'>
+                <LogIn className='h-4 w-4' />
+                Log in
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className='py-8 md:py-10 max-w-2xl page-enter'>
+        <Card className='border-dashed animate-fade-up'>
+          <CardContent className='p-6 text-center space-y-4'>
+            <Clock className='h-12 w-12 mx-auto opacity-20' />
+            <p className='text-sm text-muted-foreground'>{loadError}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const handleRemove = (id: string) => {
-    removeFromHistory(id);
-    setItems((prev) => prev.filter((item) => item.id !== id));
-    toast.success('Entry removed');
+    removeFromHistory(id)
+      .then(() => {
+        setItems((prev) => prev.filter((item) => item.id !== id));
+        toast.success('Entry removed');
+      })
+      .catch(() => toast.error('Failed to remove entry'));
   };
 
   const handleClear = () => {
-    clearHistory();
-    setItems([]);
-    toast.success('History cleared');
+    clearHistory()
+      .then(() => {
+        setItems([]);
+        toast.success('History cleared');
+      })
+      .catch(() => toast.error('Failed to clear history'));
   };
 
   return (
@@ -157,7 +237,7 @@ const History: React.FC = () => {
             <div>
               <h1 className='text-xl font-bold text-foreground'>History</h1>
               <p className='text-xs text-muted-foreground'>
-                {items.length} conversion{items.length !== 1 ? 's' : ''} saved locally
+                {items.length} conversion{items.length !== 1 ? 's' : ''} saved on the server
               </p>
             </div>
           </div>

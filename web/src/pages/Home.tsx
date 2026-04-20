@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Image, Video, Clock, ArrowRight, Sparkles } from 'lucide-react';
+import { Image, Video, Clock, ArrowRight } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 
@@ -25,9 +25,9 @@ const features = [
     to: '/history',
     icon: Clock,
     title: 'History',
-    description: 'Review and copy from your previous image conversions.',
+    description: 'Review and copy your previous image conversions from the server.',
     cta: 'View History',
-    badge: 'localStorage'
+    badge: 'SQLite'
   }
 ];
 

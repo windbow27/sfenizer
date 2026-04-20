@@ -14,4 +14,16 @@ The dataset is pretty limited (I only have one Shogi board). Feel free to contac
 
 2. Download the model and place it in the root directory.
 
-3. Open and follow the steps in `sfenizer_notebook.ipynb`.
+3. Start the backend:
+
+   ```bash
+   uvicorn api:app --reload
+   ```
+
+4. Start the frontend:
+
+   ```bash
+   cd web
+   npm install
+   npm run dev
+   ```

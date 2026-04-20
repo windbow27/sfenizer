@@ -15,3 +15,5 @@ work_dirs
 runs
 vid
 sfen_predictions.txt
+
+sfenizer.db
