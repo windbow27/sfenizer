@@ -23,15 +23,11 @@ import generate_labels
 try:
     from main_shogi import (
         ShogiBoardMapper, StateStabilizer, ShogiEngine,
-        draw_info_panel, draw_evaluation_bar, draw_engine_suggestions,
-        is_valid_transition,
+        draw_evaluation_bar, draw_engine_suggestions,
     )
-    _shogi_pipeline = True
 except Exception:
-    _shogi_pipeline = False
     ShogiBoardMapper = StateStabilizer = ShogiEngine = None
-    draw_info_panel = draw_evaluation_bar = draw_engine_suggestions = None
-    is_valid_transition = None
+    draw_evaluation_bar = draw_engine_suggestions = None
 
 try:
     from ultralytics import YOLO  # type: ignore[import-not-found]
@@ -435,12 +431,15 @@ class VideoSession:
         if shogi_model is None or self.mapper is None:
             return frame, [["empty"] * 9 for _ in range(9)], to_sfen([["empty"] * 9 for _ in range(9)]), ""
 
-        input_frame = cv2.resize(frame, (640, 640))
-        results = shogi_model.predict(input_frame, conf=0.1, verbose=False)
+        h, w = frame.shape[:2]
+        if max(h, w) > 720:
+            s = 720 / max(h, w)
+            frame = cv2.resize(frame, (int(w * s), int(h * s)))
+        results = shogi_model.predict(frame, conf=0.1, imgsz=640, verbose=False)
         boxes = results[0].boxes.xyxy.cpu().numpy()
         classes_arr = results[0].boxes.cls.cpu().numpy()
         names = shogi_model.names
-        annotated = input_frame.copy()
+        annotated = frame.copy()
 
         # Calibration
         if self.mapper.homography_matrix is None:
@@ -473,19 +472,11 @@ class VideoSession:
         raw_sfen = to_sfen(board).split()[0]
         stable_sfen = self.stabilizer.update(raw_sfen)
 
-        # Validate transition + track turn
+        # Track turn: toggle on each confirmed stable SFEN change
         if stable_sfen and stable_sfen != self.last_stable_sfen:
-            if is_valid_transition is not None:
-                is_valid, _, next_turn, _ = is_valid_transition(self.last_validated_sfen, stable_sfen)
-            else:
-                is_valid, next_turn = True, None
-            if is_valid and next_turn:
-                self.last_validated_sfen = stable_sfen
-                self.last_stable_sfen = stable_sfen
-                self.current_turn = next_turn
-            elif not self.last_validated_sfen:
-                self.last_validated_sfen = stable_sfen
-                self.last_stable_sfen = stable_sfen
+            if self.last_stable_sfen is not None:
+                self.current_turn = 'w' if self.current_turn == 'b' else 'b'
+            self.last_stable_sfen = stable_sfen
 
         # Engine analysis
         if self.use_engine and stable_sfen and stable_sfen != self.last_analyzed_state:
@@ -499,12 +490,36 @@ class VideoSession:
             if self.best_moves and draw_engine_suggestions:
                 draw_engine_suggestions(annotated, self.mapper, self.best_moves, self.evaluations, self.current_turn)
 
-        # Draw UI overlays
+        # Draw eval bar
         if draw_evaluation_bar:
             draw_evaluation_bar(annotated, self.current_evaluation)
-        if draw_info_panel:
-            draw_info_panel(annotated, self.current_turn, self.best_moves, self.evaluations,
-                            stable_sfen, "OK", True)
+
+        # Info panel — drawn from x=10 so it sits flush left on any frame width
+        h_frame = annotated.shape[0]
+        panel_h = min(110, int(h_frame * 0.13))
+        overlay = annotated.copy()
+        cv2.rectangle(overlay, (0, 0), (annotated.shape[1], panel_h), (40, 40, 40), -1)
+        cv2.addWeighted(overlay, 0.75, annotated, 0.25, 0, annotated)
+        cv2.rectangle(annotated, (0, 0), (annotated.shape[1], panel_h), (100, 100, 100), 2)
+
+        turn_text = 'Turn: BLACK' if self.current_turn == 'b' else 'Turn: WHITE'
+        turn_color = (255, 255, 255) if self.current_turn == 'b' else (200, 200, 200)
+        cv2.putText(annotated, turn_text, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, turn_color, 1)
+        if self.best_moves:
+            cv2.putText(annotated, f'Best: {self.best_moves[0]}', (10 + annotated.shape[1] // 3 + 16, 28),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
+        if self.evaluations and self.evaluations[0] is not None:
+            eval_color = (100, 255, 100) if self.evaluations[0] > 0 else (100, 100, 255)
+            cv2.putText(annotated, f'Eval: {self.evaluations[0]:+d}',
+                        (10 + 2 * annotated.shape[1] // 3, 28),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, eval_color, 2)
+        sfen_display = (stable_sfen[:40] + '...') if stable_sfen and len(stable_sfen) > 40 else (stable_sfen or 'Stabilizing...')
+        cv2.putText(annotated, f'SFEN: {sfen_display}', (10, 58),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (150, 200, 255), 1)
+        if self.best_moves:
+            moves_text = ' | '.join(f'{i+1}. {m}' for i, m in enumerate(self.best_moves[:3]))
+            cv2.putText(annotated, f'Top: {moves_text}', (10, 82),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
 
         sfen = to_sfen(board)
         csa = to_csa(board)

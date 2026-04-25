@@ -49,8 +49,10 @@ const VideoSfenizer: React.FC = () => {
     const canvas = canvasRef.current;
     if (!video || !canvas || video.readyState < 2) return;
 
-    canvas.width = 640;
-    canvas.height = 480;
+    const MAX_DIM = 720;
+    const scale = Math.min(1, MAX_DIM / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -149,17 +151,13 @@ const VideoSfenizer: React.FC = () => {
         {/* Camera / annotated feed */}
         <Card className='-mx-4 sm:mx-0 overflow-hidden border-border/60 animate-fade-up delay-100'>
           <CardContent className='p-0'>
-            <div
-              className='relative bg-black sm:rounded-lg overflow-hidden'
-              style={{ aspectRatio: '3/4' }}>
+            <div className='relative bg-black sm:rounded-lg overflow-hidden min-h-[40vw]'>
               {/* Live camera preview (always rendered so the stream stays alive) */}
               <video
                 ref={videoRef}
                 playsInline
                 muted
-                className={`w-full h-full object-cover ${
-                  showAnnotated && liveResult ? 'hidden' : 'block'
-                }`}
+                className={`w-full block ${showAnnotated && liveResult ? 'hidden' : ''}`}
               />
 
               {/* Annotated frame from backend */}
@@ -167,7 +165,7 @@ const VideoSfenizer: React.FC = () => {
                 <img
                   src={`data:image/jpeg;base64,${liveResult.frame}`}
                   alt='Annotated'
-                  className='w-full h-full object-cover'
+                  className='w-full block'
                 />
               )}
 
