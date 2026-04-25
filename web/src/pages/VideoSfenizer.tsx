@@ -4,9 +4,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
 
-const WS_URL = import.meta.env.PROD
-  ? `wss://${location.host}/api/ws/video`
-  : 'ws://localhost:8000/ws/video';
+const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws/video`;
 
 interface LiveResult {
   frame: string;
@@ -134,7 +132,7 @@ const VideoSfenizer: React.FC = () => {
   }, [stopCamera]);
 
   return (
-    <div className='py-8 md:py-10 max-w-2xl page-enter'>
+    <div className='py-4 md:py-10 max-w-2xl page-enter'>
       <div className='space-y-6'>
         <div className='flex items-center gap-3 animate-fade-up'>
           <div className='h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center'>
@@ -149,17 +147,17 @@ const VideoSfenizer: React.FC = () => {
         </div>
 
         {/* Camera / annotated feed */}
-        <Card className='overflow-hidden border-border/60 animate-fade-up delay-100'>
+        <Card className='-mx-4 sm:mx-0 overflow-hidden border-border/60 animate-fade-up delay-100'>
           <CardContent className='p-0'>
             <div
-              className='relative bg-black rounded-lg overflow-hidden'
-              style={{ aspectRatio: '4/3' }}>
+              className='relative bg-black sm:rounded-lg overflow-hidden'
+              style={{ aspectRatio: '3/4' }}>
               {/* Live camera preview (always rendered so the stream stays alive) */}
               <video
                 ref={videoRef}
                 playsInline
                 muted
-                className={`w-full h-full object-contain ${
+                className={`w-full h-full object-cover ${
                   showAnnotated && liveResult ? 'hidden' : 'block'
                 }`}
               />
@@ -169,7 +167,7 @@ const VideoSfenizer: React.FC = () => {
                 <img
                   src={`data:image/jpeg;base64,${liveResult.frame}`}
                   alt='Annotated'
-                  className='w-full h-full object-contain'
+                  className='w-full h-full object-cover'
                 />
               )}
 

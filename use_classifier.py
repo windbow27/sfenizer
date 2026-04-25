@@ -87,15 +87,15 @@ def predict_cell(image):
 def predict_board(warped_board):
     cell_w = warped_board.shape[1] // 9
     cell_h = warped_board.shape[0] // 9
-    board_predictions = []
+    tensors = []
     for row in range(9):
-        row_preds = []
         for col in range(9):
             x = col * cell_w
             y = row * cell_h
             cell = warped_board[y:y+cell_h, x:x+cell_w]
             pil_img = Image.fromarray(cv2.cvtColor(cell, cv2.COLOR_BGR2RGB))
-            pred_label = predict_cell(pil_img)
-            row_preds.append(pred_label)
-        board_predictions.append(row_preds)
-    return board_predictions
+            tensors.append(transform(pil_img))
+    batch = torch.stack(tensors).to(device)
+    with torch.no_grad():
+        pred_indices = torch.argmax(model(batch), dim=1).tolist()
+    return [[classes[pred_indices[row * 9 + col]] for col in range(9)] for row in range(9)]

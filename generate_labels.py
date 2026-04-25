@@ -6,10 +6,13 @@ from IPython.display import display
 import ipywidgets as widgets
 import random
 
-def detect_board(image_path, debug=False):
-    img = cv2.imread(image_path)
-    if img is None:
-        raise FileNotFoundError(f"Could not load image '{image_path}'.")
+def detect_board(image_source, debug=False):
+    if isinstance(image_source, np.ndarray):
+        img = image_source
+    else:
+        img = cv2.imread(image_source)
+        if img is None:
+            raise FileNotFoundError(f"Could not load image '{image_source}'.")
     orig = img.copy()
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (7, 7), 0)

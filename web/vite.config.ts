@@ -10,5 +10,15 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src')
     }
+  },
+  server: {
+    allowedHosts: ['gravel-wrongdoer-voice.ngrok-free.dev'],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        rewrite: (path) => path.replace(/^\/api/, ''),
+        ws: true,
+      }
+    }
   }
 });

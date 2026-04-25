@@ -626,7 +626,7 @@ def draw_info_panel(frame, current_turn, best_moves, evaluations, stable_sfen, v
 def main():
     # SETUP
     video_path = 'vid/board_07.mp4' 
-    model_path = 'runs/detect/train9/weights/best.pt'
+    model_path = 'runs/detect/train3/weights/best.pt'
     engine_path = None
     
     cap = cv2.VideoCapture(video_path)
