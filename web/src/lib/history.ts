@@ -1,3 +1,5 @@
+import { apiFetch } from './api';
+
 export interface HistoryItem {
   id: string;
   timestamp: number;
@@ -7,30 +9,46 @@ export interface HistoryItem {
   board: string[][];
 }
 
-const STORAGE_KEY = 'sfenizer-history';
-const MAX_ITEMS = 50;
+export async function getHistory(): Promise<HistoryItem[]> {
+  const response = await apiFetch('/history');
+  if (!response.ok) {
+    throw new Error('Failed to load history');
+  }
 
-export function getHistory(): HistoryItem[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch {
-    return [];
+  const data = await response.json();
+  return data.items as HistoryItem[];
+}
+
+export async function addToHistory(item: Omit<HistoryItem, 'id'>): Promise<HistoryItem> {
+  const response = await apiFetch('/history', {
+    method: 'POST',
+    body: JSON.stringify(item)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.detail || 'Failed to save history');
+  }
+
+  return (await response.json()) as HistoryItem;
+}
+
+export async function removeFromHistory(id: string): Promise<void> {
+  const response = await apiFetch(`/history/${id}`, {
+    method: 'DELETE'
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to remove history item');
   }
 }
 
-export function addToHistory(item: Omit<HistoryItem, 'id'>): void {
-  const history = getHistory();
-  const newItem: HistoryItem = { ...item, id: `${Date.now()}-${Math.random()}` };
-  history.unshift(newItem);
-  if (history.length > MAX_ITEMS) history.pop();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-}
+export async function clearHistory(): Promise<void> {
+  const response = await apiFetch('/history', {
+    method: 'DELETE'
+  });
 
-export function removeFromHistory(id: string): void {
-  const history = getHistory().filter((item) => item.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-}
-
-export function clearHistory(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  if (!response.ok) {
+    throw new Error('Failed to clear history');
+  }
 }

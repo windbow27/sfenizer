@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
 import { addToHistory } from '../lib/history';
+import { useAuth } from '../lib/auth';
 import ShogiBoard from '../components/ShogiBoard';
 
 interface ConversionResult {
@@ -16,6 +17,7 @@ interface ConversionResult {
 const API_BASE_URL = import.meta.env.PROD ? '/api' : 'http://localhost:8000';
 
 const ImageSfenizer: React.FC = () => {
+  const { isAuthenticated } = useAuth();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -102,14 +104,24 @@ const ImageSfenizer: React.FC = () => {
       setResult(data);
       toast.success('Board converted successfully!');
 
-      // Save to history
-      addToHistory({
-        timestamp: Date.now(),
-        thumbnail: selectedImage,
-        sfen: data.sfen,
-        csa: data.csa,
-        board: data.board
-      });
+      if (isAuthenticated) {
+        try {
+          await addToHistory({
+            timestamp: Date.now(),
+            thumbnail: selectedImage,
+            sfen: data.sfen,
+            csa: data.csa,
+            board: data.board
+          });
+          toast.success('Saved to server history');
+        } catch (historyError) {
+          toast.error(
+            historyError instanceof Error ? historyError.message : 'Failed to save history'
+          );
+        }
+      } else {
+        toast.info('Log in to save conversions to history');
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'An error occurred');
     } finally {

@@ -6,6 +6,7 @@ import Home from './pages/Home';
 import ImageSfenizer from './pages/ImageSfenizer';
 import VideoSfenizer from './pages/VideoSfenizer';
 import History from './pages/History';
+import Login from './pages/Login';
 
 const App: React.FC = () => {
   return (
@@ -17,6 +18,7 @@ const App: React.FC = () => {
           <main className='flex-1 min-w-0'>
             <Routes>
               <Route path='/' element={<Home />} />
+              <Route path='/login' element={<Login />} />
               <Route path='/image' element={<ImageSfenizer />} />
               <Route path='/video' element={<VideoSfenizer />} />
               <Route path='/history' element={<History />} />

@@ -16,3 +16,5 @@ runs
 vid
 sfen_predictions.txt
 latex
+
+sfenizer.db

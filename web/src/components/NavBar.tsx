@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Home, Image, Video, Clock } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Menu, X, Home, Image, Video, Clock, LogOut, LogIn } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from './ui/button';
+import { useAuth } from '../lib/auth';
 
 const navLinks = [
   { to: '/', label: 'Home', icon: Home },
@@ -12,7 +14,19 @@ const navLinks = [
 
 const NavBar: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success('Logged out');
+      navigate('/');
+    } catch {
+      toast.error('Logout failed');
+    }
+  };
 
   return (
     <nav className='border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50 animate-fade-down'>
@@ -50,7 +64,22 @@ const NavBar: React.FC = () => {
 
           {/* Right side placeholder + mobile hamburger */}
           <div className='flex items-center gap-2'>
-            {/* <span className='hidden sm:block text-xs text-muted-foreground'>v2</span> */}
+            {!isLoading && isAuthenticated ? (
+              <div className='hidden sm:flex items-center gap-2'>
+                <span className='text-xs text-muted-foreground'>Signed in as {user?.username}</span>
+                <Button variant='outline' size='sm' className='gap-2' onClick={handleLogout}>
+                  <LogOut className='h-4 w-4' />
+                  Logout
+                </Button>
+              </div>
+            ) : (
+              <Button variant='outline' size='sm' className='hidden sm:flex gap-2' asChild>
+                <Link to='/login'>
+                  <LogIn className='h-4 w-4' />
+                  Login
+                </Link>
+              </Button>
+            )}
             <Button
               variant='ghost'
               size='sm'
@@ -84,6 +113,25 @@ const NavBar: React.FC = () => {
                 </Link>
               );
             })}
+            <div className='pt-2 mt-2 border-t border-border'>
+              {!isLoading && isAuthenticated ? (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='w-full justify-start gap-2'
+                  onClick={handleLogout}>
+                  <LogOut className='h-4 w-4' />
+                  Logout{user?.username ? ` (${user.username})` : ''}
+                </Button>
+              ) : (
+                <Button variant='outline' size='sm' className='w-full justify-start gap-2' asChild>
+                  <Link to='/login' onClick={() => setMenuOpen(false)}>
+                    <LogIn className='h-4 w-4' />
+                    Login
+                  </Link>
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
