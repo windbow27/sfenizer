@@ -9,25 +9,25 @@ const features = [
     to: '/image',
     icon: Image,
     title: 'Image Sfenizer',
-    description: 'Upload or paste a shogi board photo to get SFEN/CSA notation instantly.',
-    cta: 'Convert Image',
-    badge: 'sfenizer.pth'
+    description: 'Upload or paste a shogi board photo to get SFEN/CSA notation.',
+    cta: 'Convert Image'
+    // badge: 'sfenizer.pth'
   },
   {
     to: '/video',
     icon: Video,
     title: 'Video Sfenizer',
-    description: 'Point your camera at a board and get real-time SFEN/CSA output via YOLO.',
-    cta: 'Open Camera',
-    badge: 'yolo11m.pt'
+    description: 'Point your camera at a board and get real-time SFEN/CSA output.',
+    cta: 'Open Camera'
+    // badge: 'yolo11m.pt'
   },
   {
     to: '/history',
     icon: Clock,
     title: 'History',
-    description: 'Review and copy your previous image conversions from the server.',
-    cta: 'View History',
-    badge: 'SQLite'
+    description: 'Review and copy your previous image conversions.',
+    cta: 'View History'
+    // badge: 'SQLite'
   }
 ];
 
@@ -55,7 +55,7 @@ const Home: React.FC = () => {
 
       {/* Feature cards */}
       <div className='space-y-4'>
-        {features.map(({ to, icon: Icon, title, description, cta, badge }, i) => (
+        {features.map(({ to, icon: Icon, title, description, cta }, i) => (
           <Link key={to} to={to} className='block group'>
             <Card
               className='group-hover:border-primary/30 transition-all duration-300 group-hover:shadow-md group-hover:-translate-y-0.5 animate-fade-up'
@@ -67,9 +67,9 @@ const Home: React.FC = () => {
                 <div className='flex-1 min-w-0'>
                   <div className='flex items-center gap-2'>
                     <h2 className='text-base font-semibold text-foreground'>{title}</h2>
-                    <span className='text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground hidden sm:inline-block'>
+                    {/* <span className='text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground hidden sm:inline-block'>
                       {badge}
-                    </span>
+                    </span> */}
                   </div>
                   <p className='text-sm text-muted-foreground mt-0.5'>{description}</p>
                 </div>
