@@ -180,16 +180,47 @@ class ShogiBoardMapper:
         """Maps pixel (x,y) to (col, row) indices 0-8."""
         if self.homography_matrix is None:
             return None
-            
+
         point = np.array([[[cx, cy]]], dtype='float32')
         transformed = cv2.perspectiveTransform(point, self.homography_matrix)
         tx, ty = transformed[0][0]
-        
+
         col = int(tx // self.cell_w)
         row = int(ty // self.cell_h)
-        
+
         if 0 <= col < 9 and 0 <= row < 9:
             return (col, row)
+        return None
+
+    def get_position(self, cx, cy):
+        """
+        Classify a detection as ('board', col, row), ('hand_black',), ('hand_white',), or None.
+        Right side of board (transformed tx >= dst_w) is Black's (sente) hand.
+        Left side (tx < 0) is White's (gote) hand.
+        """
+        if self.homography_matrix is None:
+            return None
+
+        point = np.array([[[cx, cy]]], dtype='float32')
+        transformed = cv2.perspectiveTransform(point, self.homography_matrix)
+        tx, ty = transformed[0][0]
+
+        col = int(tx // self.cell_w)
+        row = int(ty // self.cell_h)
+
+        if 0 <= col < 9 and 0 <= row < 9:
+            return ('board', col, row)
+
+        # Vertical tolerance for hand area 
+        y_min = -self.dst_h * 0.3
+        y_max = self.dst_h * 1.3
+        if not (y_min <= ty <= y_max):
+            return None
+
+        if tx >= self.dst_w:
+            return ('hand_black',)
+        if tx < 0:
+            return ('hand_white',)
         return None
 
     def draw_grid(self, img):
@@ -298,18 +329,19 @@ class ShogiEngine:
                 if expected in line:
                     return line
     
-    def analyze_position(self, sfen, time_ms=1000, turn='b'):
+    def analyze_position(self, board_sfen, hand_sfen='-', time_ms=1000, turn='b'):
         """
         Analyze position and get top 3 moves for current player.
+        board_sfen: just the board portion. hand_sfen: SFEN hand notation ('-' if empty).
         """
         self.current_turn = turn
-        
+
         def _analyze():
             try:
                 self.best_moves = []
                 self.evaluations = []
-                
-                self._send_command(f"position sfen {sfen} {turn} - 1")
+
+                self._send_command(f"position sfen {board_sfen} {turn} {hand_sfen} 1")
                 self._send_command(f"go movetime {time_ms}")
                 
                 temp_moves = {}
@@ -394,34 +426,71 @@ def grid_to_sfen(grid_dict):
         sfen_rows.append(row_str)
     return "/".join(sfen_rows)
 
-def is_valid_transition(prev_sfen, new_sfen):
+def hand_to_sfen(hand_dict):
     """
-    Check if new_sfen is reachable from prev_sfen in one legal move.
+    Convert hand piece counts to SFEN hand notation.
+    hand_dict keys are SFEN piece chars (uppercase=Black, lowercase=White).
+    Standard order: R B G S N L P for each color, Black first.
+    """
+    if not hand_dict:
+        return "-"
+
+    order = ['R', 'B', 'G', 'S', 'N', 'L', 'P',
+             'r', 'b', 'g', 's', 'n', 'l', 'p']
+    result = ""
+    for piece in order:
+        count = hand_dict.get(piece, 0)
+        if count > 0:
+            if count > 1:
+                result += str(count)
+            result += piece
+    return result if result else "-"
+
+
+def _split_full_sfen(full_sfen):
+    """Split a 'board hand' string into (board, hand)."""
+    if not full_sfen:
+        return None, "-"
+    parts = full_sfen.split(" ", 1)
+    board = parts[0]
+    hand = parts[1] if len(parts) > 1 and parts[1] else "-"
+    return board, hand
+
+
+def is_valid_transition(prev_full_sfen, new_full_sfen):
+    """
+    Check if new_full_sfen is reachable from prev_full_sfen in one legal move
+    Both inputs are 'board hand' strings 
     Returns (is_valid, error_message, turn, move_usi)
     """
-    if not prev_sfen or not new_sfen:
+    if not prev_full_sfen or not new_full_sfen:
         return True, "No previous state", None, None
-    
-    if prev_sfen == new_sfen:
+
+    if prev_full_sfen == new_full_sfen:
         return True, "Same state", None, None
-    
+
+    prev_board, prev_hand = _split_full_sfen(prev_full_sfen)
+    new_board, new_hand = _split_full_sfen(new_full_sfen)
+
     try:
         for turn in ['b', 'w']:
-            board = shogi.Board(f"{prev_sfen} {turn} - 1")
+            board = shogi.Board(f"{prev_board} {turn} {prev_hand} 1")
             legal_moves = list(board.legal_moves)
-            
+
             for move in legal_moves:
                 test_board = shogi.Board(board.sfen())
                 test_board.push(move)
-                result_sfen = test_board.sfen().split()[0]
-                
-                if result_sfen == new_sfen:
+                parts = test_board.sfen().split()
+                result_board = parts[0]
+                result_hand = parts[2] if len(parts) > 2 else "-"
+
+                if result_board == new_board and result_hand == new_hand:
                     player = "Black" if turn == 'b' else "White"
                     next_turn = 'w' if turn == 'b' else 'b'
                     return True, f"Valid move: {move.usi()} ({player})", next_turn, move.usi()
-        
+
         return False, "Not reachable in 1 move", None, None
-        
+
     except Exception as e:
         return False, f"Validation error: {str(e)}", None, None
 
@@ -559,6 +628,38 @@ def draw_engine_suggestions(frame, mapper, best_moves, evaluations, turn):
         except Exception as e:
             print(f"Error drawing move {idx+1}: {e}")
 
+def draw_hand_panels(frame, black_hand, white_hand):
+    """Draw small overlays listing each player's pieces in hand."""
+    h, w = frame.shape[:2]
+
+    def hand_text(hand):
+        if not hand:
+            return "(empty)"
+        order = ['R', 'B', 'G', 'S', 'N', 'L', 'P']
+        parts = []
+        for p in order:
+            for key in (p, p.lower()):
+                if hand.get(key, 0) > 0:
+                    parts.append(f"{key}x{hand[key]}" if hand[key] > 1 else key)
+        return " ".join(parts) if parts else "(empty)"
+
+    # Black (sente) hand - right side
+    b_text = "Black: " + hand_text(black_hand)
+    (bw, bh), _ = cv2.getTextSize(b_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+    bx, by = w - bw - 20, h - 30
+    cv2.rectangle(frame, (bx - 8, by - bh - 8), (bx + bw + 8, by + 8), (0, 0, 0), -1)
+    cv2.rectangle(frame, (bx - 8, by - bh - 8), (bx + bw + 8, by + 8), (180, 180, 180), 1)
+    cv2.putText(frame, b_text, (bx, by), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+    # White (gote) hand - left side
+    w_text = "White: " + hand_text(white_hand)
+    (ww, wh), _ = cv2.getTextSize(w_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+    wx, wy = 20, h - 30
+    cv2.rectangle(frame, (wx - 8, wy - wh - 8), (wx + ww + 8, wy + 8), (0, 0, 0), -1)
+    cv2.rectangle(frame, (wx - 8, wy - wh - 8), (wx + ww + 8, wy + 8), (180, 180, 180), 1)
+    cv2.putText(frame, w_text, (wx, wy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
+
+
 def draw_info_panel(frame, current_turn, best_moves, evaluations, stable_sfen, validation_msg, is_complete):
     """Draw information panel with game state."""
     panel_height = 120
@@ -626,7 +727,7 @@ def draw_info_panel(frame, current_turn, best_moves, evaluations, stable_sfen, v
 def main():
     # SETUP
     video_path = 'vid/board_07.mp4' 
-    model_path = 'runs/detect/train3/weights/best.pt'
+    model_path = 'runs/detect/train4/weights/best.pt'
     engine_path = None
     
     cap = cv2.VideoCapture(video_path)
@@ -700,29 +801,48 @@ def main():
 
         # 3. MAP PIECES
         current_grid = {}
+        current_hand = {}  # SFEN piece char -> count (uppercase=Black, lowercase=White)
         detections = []
         for box, cls_idx in zip(boxes, classes):
             x1, y1, x2, y2 = box
             cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-            
-            grid_pos = mapper.get_grid_pos(cx, cy)
+
             cls_name = names[int(cls_idx)]
-            
-            if grid_pos:
-                sfen_char = mapper.class_map.get(cls_name, '?')
-                current_grid[grid_pos] = sfen_char
-                detections.append(f"{cls_name}@{grid_pos}")
-                
-                # Draw piece character
-                cv2.putText(frame, sfen_char, (int(cx)-10, int(cy)), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-            else:
+            piece_letter = cls_name.split('_')[0]  # 'L','N','S','G','K','R','B','P'
+
+            position = mapper.get_position(cx, cy)
+
+            if position is None:
                 detections.append(f"{cls_name}@({int(cx)},{int(cy)})")
+                continue
+
+            kind = position[0]
+
+            if kind == 'board':
+                col, row = position[1], position[2]
+                sfen_char = mapper.class_map.get(cls_name, '?')
+                current_grid[(col, row)] = sfen_char
+                detections.append(f"{cls_name}@({col},{row})")
+                cv2.putText(frame, sfen_char, (int(cx) - 10, int(cy)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+            elif kind in ('hand_black', 'hand_white'):
+                if piece_letter == 'K':
+                    # Kings cannot be in hand - skip
+                    detections.append(f"{cls_name}@{kind}(ignored)")
+                    continue
+                # Side of board determines ownership, regardless of detected orientation.
+                hand_char = piece_letter if kind == 'hand_black' else piece_letter.lower()
+                current_hand[hand_char] = current_hand.get(hand_char, 0) + 1
+                detections.append(f"{cls_name}@{kind}")
+                cv2.putText(frame, hand_char, (int(cx) - 10, int(cy)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
 
         is_complete, completeness_msg = detect_incomplete_board(current_grid)
 
-        # 4. GENERATE SFEN
-        raw_sfen = grid_to_sfen(current_grid)
+        # 4. GENERATE SFEN (board + hand)
+        raw_board_sfen = grid_to_sfen(current_grid)
+        raw_hand_sfen = hand_to_sfen(current_hand)
+        raw_sfen = f"{raw_board_sfen} {raw_hand_sfen}"
         
         # 5. STABILIZE
         stable_sfen = stabilizer.update(raw_sfen, is_valid=is_complete)
@@ -765,10 +885,10 @@ def main():
         )
         
         if should_analyze:
-            full_sfen = f"{stable_sfen}"
+            stable_board, stable_hand = _split_full_sfen(stable_sfen)
             player = "Black" if current_turn == 'b' else "White"
-            print(f"Analyzing for {player}'s turn: {stable_sfen[:40]}...")
-            engine.analyze_position(full_sfen, time_ms=500, turn=current_turn)
+            print(f"Analyzing for {player}'s turn: {stable_sfen[:60]}...")
+            engine.analyze_position(stable_board, stable_hand, time_ms=500, turn=current_turn)
             last_analyzed_state = stable_sfen
         
         best_moves = []
@@ -796,6 +916,10 @@ def main():
         # Draw UI Elements
         draw_evaluation_bar(frame, current_evaluation)
         draw_info_panel(frame, current_turn, best_moves, evaluations, stable_sfen, validation_msg, is_complete)
+        # Split current_hand into Black/White subdicts for display.
+        black_hand_view = {k: v for k, v in current_hand.items() if k.isupper()}
+        white_hand_view = {k: v for k, v in current_hand.items() if k.islower()}
+        draw_hand_panels(frame, black_hand_view, white_hand_view)
 
         cv2.imshow("Shogi Analysis", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):

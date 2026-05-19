@@ -17,7 +17,7 @@ import cv2
 import os
 import base64
 import json
-from use_classifier import predict_board, to_sfen, to_csa
+from use_classifier import to_sfen, to_csa
 import generate_labels
 
 try:
@@ -37,7 +37,7 @@ except ImportError:
 DB_PATH = Path(__file__).with_name('sfenizer.db')
 SESSION_TTL_HOURS = 24 * 7
 
-_SHOGI_MODEL_PATH = Path('runs/detect/train3/weights/best.pt')
+_SHOGI_MODEL_PATH = Path('runs/detect/train4/weights/best.pt')
 shogi_model = YOLO(str(_SHOGI_MODEL_PATH)) if YOLO is not None and _SHOGI_MODEL_PATH.exists() else None
 
 
@@ -253,6 +253,83 @@ def yolo_to_board(results, img_size=640):
             board[row][col] = cls
     return board
 
+
+def hand_dict_to_sfen(hand_dict: dict) -> str:
+    """Encode a hand dict ({'P': 2, 'p': 1, ...}) as SFEN hand notation."""
+    if not hand_dict:
+        return "-"
+    order = ['R', 'B', 'G', 'S', 'N', 'L', 'P',
+             'r', 'b', 'g', 's', 'n', 'l', 'p']
+    result = ""
+    for piece in order:
+        count = hand_dict.get(piece, 0)
+        if count > 0:
+            if count > 1:
+                result += str(count)
+            result += piece
+    return result or "-"
+
+
+def split_hand_for_client(hand_dict: dict) -> dict:
+    """Split a flat hand dict into {'black': {...}, 'white': {...}} for the frontend."""
+    return {
+        'black': {k: v for k, v in hand_dict.items() if k.isupper()},
+        'white': {k: v for k, v in hand_dict.items() if k.islower()},
+    }
+
+
+def yolo_to_board_and_hand(results, M, board_size):
+    """
+    Map YOLO detections (run on the ORIGINAL image) into a 9x9 board and
+    a hand dict, using the homography M from detect_board.
+
+    board_size is (max_width, max_height) of the warped board.
+    Detections whose center, after applying M, falls inside [0,max_w]x[0,max_h]
+    are board pieces. Detections to the right of the board (tx >= max_w) are
+    Black's (sente) hand; to the left (tx < 0) are White's (gote) hand.
+    """
+    board = [["empty"] * 9 for _ in range(9)]
+    hand: dict[str, int] = {}
+
+    max_w, max_h = board_size
+    cell_w = max_w / 9
+    cell_h = max_h / 9
+
+    for box in results[0].boxes:
+        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+        cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+        cls_name = results[0].names[int(box.cls)]
+
+        point = np.array([[[cx, cy]]], dtype='float32')
+        transformed = cv2.perspectiveTransform(point, M)
+        tx, ty = transformed[0][0]
+
+        col = int(tx // cell_w)
+        row = int(ty // cell_h)
+
+        if 0 <= col < 9 and 0 <= row < 9:
+            board[row][col] = cls_name
+            continue
+
+        # Hand zone: must be vertically near the board.
+        if not (-max_h * 0.3 <= ty <= max_h * 1.3):
+            continue
+
+        piece_letter = cls_name.split('_')[0]
+        if piece_letter == 'K':
+            # Kings cannot be in hand.
+            continue
+
+        if tx >= max_w:
+            hand_char = piece_letter  # Black / sente
+        elif tx < 0:
+            hand_char = piece_letter.lower()  # White / gote
+        else:
+            continue
+        hand[hand_char] = hand.get(hand_char, 0) + 1
+
+    return board, hand
+
 app = FastAPI(title="Sfenizer API", version="1.0.0")
 
 app.add_middleware(
@@ -334,39 +411,49 @@ async def convert_board(file: UploadFile = File(...)):
     try:
         if not file.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
-        
+        if shogi_model is None:
+            raise HTTPException(status_code=503, detail="YOLO model is unavailable on this server")
+
         contents = await file.read()
         image = Image.open(io.BytesIO(contents))
-        
+
         opencv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        
+
         with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
             temp_path = temp_file.name
         cv2.imwrite(temp_path, opencv_image)
-        
+
         try:
-            warped_board, corners, original = generate_labels.detect_board(temp_path)
-            
+            _, M, board_size = generate_labels.detect_board(temp_path)
             os.remove(temp_path)
-            
-            predictions = predict_board(warped_board)
-            
-            sfen = to_sfen(predictions)
-            csa = to_csa(predictions)
-            
+
+            # Run YOLO on the ORIGINAL image so off-board (hand) pieces are visible.
+            # The homography M then projects each detection into warped board-space,
+            # where x<0 -> White's hand, x>=max_w -> Black's hand.
+            results = shogi_model.predict(opencv_image, conf=0.3, verbose=False)
+            board, hand = yolo_to_board_and_hand(results, M, board_size)
+
+            hand_sfen = hand_dict_to_sfen(hand)
+            sfen = to_sfen(board, hands=hand_sfen)
+            csa = to_csa(board)
+
             return JSONResponse(content={
                 "success": True,
                 "sfen": sfen,
                 "csa": csa,
-                "board": predictions
+                "board": board,
+                "hand": split_hand_for_client(hand),
             })
-            
+
+        except HTTPException:
+            raise
         except Exception as board_error:
-            # Clean up temp file if it exists
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             raise HTTPException(status_code=400, detail=f"Board detection failed: {str(board_error)}")
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 
@@ -453,23 +540,38 @@ class VideoSession:
 
         self.mapper.draw_grid(annotated)
 
-        # Map detections to board grid
+        # Map detections to board grid and hand zones
         board = [["empty"] * 9 for _ in range(9)]
+        hand: dict[str, int] = {}
         for box, cls_idx in zip(boxes, classes_arr):
             x1, y1, x2, y2 = box
             cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-            grid_pos = self.mapper.get_grid_pos(cx, cy)
             cls_name = names[int(cls_idx)]
-            if grid_pos:
-                col, row = grid_pos
-                if 0 <= row < 9 and 0 <= col < 9:
-                    board[row][col] = cls_name
-                    label = self.mapper.class_map.get(cls_name, cls_name.split('_')[0])
-                    cv2.putText(annotated, label, (int(cx) - 10, int(cy)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+            piece_letter = cls_name.split('_')[0]
 
-        # Stabilise SFEN
-        raw_sfen = to_sfen(board).split()[0]
+            position = self.mapper.get_position(cx, cy)
+            if position is None:
+                continue
+
+            kind = position[0]
+            if kind == 'board':
+                col, row = position[1], position[2]
+                board[row][col] = cls_name
+                label = self.mapper.class_map.get(cls_name, piece_letter)
+                cv2.putText(annotated, label, (int(cx) - 10, int(cy)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+            elif kind in ('hand_black', 'hand_white'):
+                if piece_letter == 'K':
+                    continue
+                hand_char = piece_letter if kind == 'hand_black' else piece_letter.lower()
+                hand[hand_char] = hand.get(hand_char, 0) + 1
+                cv2.putText(annotated, hand_char, (int(cx) - 10, int(cy)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
+
+        # Stabilise on board + hand together
+        hand_sfen = hand_dict_to_sfen(hand)
+        raw_board_sfen = to_sfen(board).split()[0]
+        raw_sfen = f"{raw_board_sfen} {hand_sfen}"
         stable_sfen = self.stabilizer.update(raw_sfen)
 
         # Track turn: toggle on each confirmed stable SFEN change
@@ -478,9 +580,13 @@ class VideoSession:
                 self.current_turn = 'w' if self.current_turn == 'b' else 'b'
             self.last_stable_sfen = stable_sfen
 
-        # Engine analysis
+        # Engine analysis - stable_sfen is "board hand"; engine wants them split
         if self.use_engine and stable_sfen and stable_sfen != self.last_analyzed_state:
-            self.engine.analyze_position(stable_sfen, time_ms=500, turn=self.current_turn)
+            parts = stable_sfen.split(" ", 1)
+            stable_board = parts[0]
+            stable_hand = parts[1] if len(parts) > 1 and parts[1] else "-"
+            self.engine.analyze_position(stable_board, stable_hand,
+                                         time_ms=500, turn=self.current_turn)
             self.last_analyzed_state = stable_sfen
         if self.use_engine and self.engine:
             self.best_moves = self.engine.get_best_moves()
@@ -521,7 +627,7 @@ class VideoSession:
             cv2.putText(annotated, f'Top: {moves_text}', (10, 82),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
 
-        sfen = to_sfen(board)
+        sfen = to_sfen(board, hands=hand_sfen)
         csa = to_csa(board)
         return annotated, board, sfen, csa
 
