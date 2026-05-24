@@ -37,7 +37,7 @@ except ImportError:
 DB_PATH = Path(__file__).with_name('sfenizer.db')
 SESSION_TTL_HOURS = 24 * 7
 
-_SHOGI_MODEL_PATH = Path('runs/detect/train4/weights/best.pt')
+_SHOGI_MODEL_PATH = Path('runs/detect/train11/weights/best.pt')
 shogi_model = YOLO(str(_SHOGI_MODEL_PATH)) if YOLO is not None and _SHOGI_MODEL_PATH.exists() else None
 
 

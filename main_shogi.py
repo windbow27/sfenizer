@@ -459,8 +459,8 @@ def _split_full_sfen(full_sfen):
 
 def is_valid_transition(prev_full_sfen, new_full_sfen):
     """
-    Check if new_full_sfen is reachable from prev_full_sfen in one legal move
-    Both inputs are 'board hand' strings 
+    Check if new_full_sfen is reachable from prev_full_sfen in one or two legal moves.
+    Two-ply matching covers the case where the stabilizer missed an intermediate state
     Returns (is_valid, error_message, turn, move_usi)
     """
     if not prev_full_sfen or not new_full_sfen:
@@ -472,24 +472,57 @@ def is_valid_transition(prev_full_sfen, new_full_sfen):
     prev_board, prev_hand = _split_full_sfen(prev_full_sfen)
     new_board, new_hand = _split_full_sfen(new_full_sfen)
 
+    def _matches(board):
+        parts = board.sfen().split()
+        result_board = parts[0]
+        result_hand = parts[2] if len(parts) > 2 else "-"
+        return result_board == new_board and result_hand == new_hand
+
+    # can change at most 4 squares (2 source + 2 destination). If more squares
+    # changed than that, 2-ply is hopeless and skip the expensive search.
+    def _expand_board(b):
+        out = []
+        for row in b.split('/'):
+            for ch in row:
+                if ch.isdigit():
+                    out.extend(['.'] * int(ch))
+                else:
+                    out.append(ch)
+        return out
+    prev_cells = _expand_board(prev_board)
+    new_cells = _expand_board(new_board)
+    squares_diff = sum(1 for a, b in zip(prev_cells, new_cells) if a != b) if len(prev_cells) == len(new_cells) else 99
+
     try:
+        # 1-ply search
         for turn in ['b', 'w']:
             board = shogi.Board(f"{prev_board} {turn} {prev_hand} 1")
-            legal_moves = list(board.legal_moves)
-
-            for move in legal_moves:
+            for move in list(board.legal_moves):
                 test_board = shogi.Board(board.sfen())
                 test_board.push(move)
-                parts = test_board.sfen().split()
-                result_board = parts[0]
-                result_hand = parts[2] if len(parts) > 2 else "-"
-
-                if result_board == new_board and result_hand == new_hand:
+                if _matches(test_board):
                     player = "Black" if turn == 'b' else "White"
                     next_turn = 'w' if turn == 'b' else 'b'
                     return True, f"Valid move: {move.usi()} ({player})", next_turn, move.usi()
 
-        return False, "Not reachable in 1 move", None, None
+        # 2-ply search 
+        if squares_diff <= 4:
+            for turn in ['b', 'w']:
+                board = shogi.Board(f"{prev_board} {turn} {prev_hand} 1")
+                for move1 in list(board.legal_moves):
+                    board1 = shogi.Board(board.sfen())
+                    board1.push(move1)
+                    for move2 in list(board1.legal_moves):
+                        board2 = shogi.Board(board1.sfen())
+                        board2.push(move2)
+                        if _matches(board2):
+                            player = "Black" if turn == 'b' else "White"
+                            # Two plies elapsed → it's the original mover's turn again
+                            next_turn = turn
+                            moves_usi = f"{move1.usi()}+{move2.usi()}"
+                            return True, f"Valid 2-move: {moves_usi} (starting {player})", next_turn, moves_usi
+
+        return False, f"Not reachable in 1-2 moves (diff={squares_diff})", None, None
 
     except Exception as e:
         return False, f"Validation error: {str(e)}", None, None
@@ -727,13 +760,13 @@ def draw_info_panel(frame, current_turn, best_moves, evaluations, stable_sfen, v
 def main():
     # SETUP
     video_path = 'vid/board_07.mp4' 
-    model_path = 'runs/detect/train4/weights/best.pt'
+    model_path = 'runs/detect/train11/weights/best.pt'
     engine_path = None
     
     cap = cv2.VideoCapture(video_path)
     model = YOLO(model_path)
     mapper = ShogiBoardMapper()
-    stabilizer = StateStabilizer(buffer_len=12, threshold=0.6)
+    stabilizer = StateStabilizer(buffer_len=6, threshold=0.7)
     engine = ShogiEngine(engine_path)
     
     use_engine = engine.start()
@@ -750,6 +783,8 @@ def main():
     current_turn = 'b'
     last_analyzed_state = None
     current_evaluation = 0
+    last_analysis_frame = -10**9   # debounce engine.analyze_position
+    analysis_debounce_frames = 30  # ~1s at 30 fps
     
     print("Starting processing... Press 'q' to quit.")
     print(f"Calibration mode: {'Dynamic (Multi-piece)' if use_dynamic_calibration else 'Static (4-lance)'}")
@@ -762,10 +797,21 @@ def main():
         
         frame_count += 1
             
-        results = model.predict(frame, conf=0.1, verbose=False)  
+        results = model.predict(frame, conf=0.35, iou=0.5, max_det=80, verbose=False)
         boxes = results[0].boxes.xyxy.cpu().numpy()
         classes = results[0].boxes.cls.cpu().numpy()
         names = model.names
+
+        # Noisy-frame skip
+        noisy_frame = len(boxes) > 55
+        if noisy_frame and mapper.homography_matrix is not None:
+            mapper.draw_grid(frame)
+            cv2.putText(frame, "Hand detected — pausing state update", (20, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
+            cv2.imshow("Shogi Analysis", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+            continue
 
         # 1. CALIBRATION
         if mapper.homography_matrix is None:
@@ -853,19 +899,21 @@ def main():
         detected_move = None
         
         if stable_sfen and stable_sfen != last_stable_sfen and is_complete:
+            # Mark this stable SFEN as already attempted so don't re-run the
+            # expensive 2-ply search every frame while it stays the same.
+            last_stable_sfen = stable_sfen
+
             is_valid, validation_msg, next_turn, detected_move = is_valid_transition(
                 last_validated_sfen, stable_sfen
             )
-            
+
             if is_valid and next_turn:
                 last_validated_sfen = stable_sfen
-                last_stable_sfen = stable_sfen
                 print(f"✓ Valid transition: {validation_msg}")
                 print(f"Turn changed: {current_turn} -> {next_turn}")
                 current_turn = next_turn
             elif not last_validated_sfen:
                 last_validated_sfen = stable_sfen
-                last_stable_sfen = stable_sfen
                 is_valid = True
                 validation_msg = "Initial state"
                 print(f"Initial position set: {stable_sfen[:30]}...")
@@ -877,19 +925,21 @@ def main():
         eval_str = "N/A"
         
         should_analyze = (
-            use_engine and 
-            stable_sfen and 
+            use_engine and
+            stable_sfen and
             is_complete and
             is_valid and
-            stable_sfen != last_analyzed_state
+            stable_sfen != last_analyzed_state and
+            (frame_count - last_analysis_frame) >= analysis_debounce_frames
         )
-        
+
         if should_analyze:
             stable_board, stable_hand = _split_full_sfen(stable_sfen)
             player = "Black" if current_turn == 'b' else "White"
             print(f"Analyzing for {player}'s turn: {stable_sfen[:60]}...")
             engine.analyze_position(stable_board, stable_hand, time_ms=500, turn=current_turn)
             last_analyzed_state = stable_sfen
+            last_analysis_frame = frame_count
         
         best_moves = []
         evaluations = []

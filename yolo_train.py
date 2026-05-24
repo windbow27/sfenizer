@@ -1,6 +1,6 @@
 from ultralytics import YOLO
 
-model = YOLO('yolo11m.pt')  
+model = YOLO('yolo11l.pt')  
 model.train(
     data='data/shogi_detection/data.yaml',
     epochs=300,               

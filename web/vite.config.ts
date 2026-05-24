@@ -12,12 +12,12 @@ export default defineConfig({
     }
   },
   server: {
-    allowedHosts: ['gravel-wrongdoer-voice.ngrok-free.dev'],
+    allowedHosts: ['sfenizer.windbow.me'],
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
         rewrite: (path) => path.replace(/^\/api/, ''),
-        ws: true,
+        ws: true
       }
     }
   }
