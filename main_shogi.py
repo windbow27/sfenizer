@@ -7,9 +7,7 @@ import subprocess
 import threading
 import queue
 
-# ==========================================
 # 1. BOARD MAPPING & CALIBRATION LOGIC
-# ==========================================
 class ShogiBoardMapper:
     def __init__(self):
         self.homography_matrix = None
@@ -250,9 +248,7 @@ class ShogiBoardMapper:
             
         return img
 
-# ==========================================
 # 2. STATE STABILIZATION
-# ==========================================
 class StateStabilizer:
     def __init__(self, buffer_len=10, threshold=0.5):
         self.buffer = deque(maxlen=buffer_len)
@@ -276,9 +272,8 @@ class StateStabilizer:
         """Return last validated stable state."""
         return self.last_valid_sfen
 
-# ==========================================
+
 # 3. SHOGI ENGINE INTEGRATION
-# ==========================================
 class ShogiEngine:
     """
     Wrapper for Shogi engine 
@@ -403,9 +398,7 @@ class ShogiEngine:
             self.process.terminate()
             self.process = None
 
-# ==========================================
 # 4. HELPER: GRID TO SFEN & VALIDATION
-# ==========================================
 def grid_to_sfen(grid_dict):
     """Converts a dict {(col, row): 'P'} into an SFEN string."""
     sfen_rows = []
@@ -754,9 +747,7 @@ def draw_info_panel(frame, current_turn, best_moves, evaluations, stable_sfen, v
         cv2.putText(frame, f"Top Moves: {moves_text}", (x_start, y_offset), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-# ==========================================
 # 5. MAIN EXECUTION LOOP
-# ==========================================
 def main():
     # SETUP
     video_path = 'vid/board_07.mp4' 

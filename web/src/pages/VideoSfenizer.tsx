@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Camera, CameraOff, Copy, Check, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
 import { Label } from '../components/ui/label';
 import { Separator } from '../components/ui/separator';
 import { toast } from 'sonner';

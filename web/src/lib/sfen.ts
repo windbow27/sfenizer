@@ -1,5 +1,3 @@
-// ─── SFEN (Shogi Forsyth–Edwards Notation) parser & helpers ───
-
 export type PieceColor = 'black' | 'white';
 export type PieceKind =
   | 'king'
@@ -27,7 +25,7 @@ export interface HandPieces {
   white: Partial<Record<HandPieceKind, number>>;
 }
 
-/** Only unpromoted pieces (except king & gold) can appear in hand */
+/** Only unpromoted pieces can appear in hand */
 export type HandPieceKind = 'rook' | 'bishop' | 'gold' | 'silver' | 'knight' | 'lance' | 'pawn';
 
 export interface ShogiPosition {
@@ -37,7 +35,7 @@ export interface ShogiPosition {
   moveNumber: number;
 }
 
-// ─── SFEN character → Piece mapping ───
+// SFEN character to Piece mapping
 
 const SFEN_PIECE_MAP: Record<string, Piece> = {
   K: { color: 'black', kind: 'king' },
@@ -87,7 +85,7 @@ const HAND_CHAR_MAP: Record<string, { color: PieceColor; kind: HandPieceKind }> 
   p: { color: 'white', kind: 'pawn' }
 };
 
-// ─── Parse SFEN string ───
+// Parse SFEN string
 
 export function parseSfen(sfen: string): ShogiPosition {
   const parts = sfen.trim().split(/\s+/);
@@ -96,7 +94,7 @@ export function parseSfen(sfen: string): ShogiPosition {
   const handsStr = parts[2] ?? '-';
   const moveStr = parts[3] ?? '1';
 
-  // --- Board ---
+  // Board
   const board: (Piece | null)[][] = [];
   const ranks = boardStr.split('/');
 
@@ -130,10 +128,8 @@ export function parseSfen(sfen: string): ShogiPosition {
     board.push(Array(9).fill(null));
   }
 
-  // --- Turn ---
   const turn: PieceColor = turnStr === 'w' ? 'white' : 'black';
 
-  // --- Hands ---
   const hands: HandPieces = { black: {}, white: {} };
   if (handsStr !== '-') {
     let j = 0;
@@ -157,7 +153,7 @@ export function parseSfen(sfen: string): ShogiPosition {
   return { board, turn, hands, moveNumber: parseInt(moveStr, 10) || 1 };
 }
 
-// ─── Piece → image path ───
+// Piece to image path
 
 const KIND_TO_FILE: Record<PieceKind, string> = {
   king: 'king',
@@ -180,7 +176,7 @@ export function pieceImagePath(piece: Piece): string {
   return `/piece/hitomoji_wood/${piece.color}_${KIND_TO_FILE[piece.kind]}.png`;
 }
 
-// ─── Board state → SFEN string (for round-trip) ───
+//  Board state to SFEN string
 
 const PIECE_TO_SFEN: Record<string, string> = {};
 for (const [sfen, piece] of Object.entries(SFEN_PIECE_MAP)) {
