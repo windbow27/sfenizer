@@ -25,11 +25,7 @@ const PieceImage: React.FC<{ piece: Piece }> = ({ piece }) => (
   </div>
 );
 
-const HandSlot: React.FC<{ color: PieceColor; kind: HandPieceKind; count: number }> = ({
-  color,
-  kind,
-  count
-}) => {
+const HandSlot: React.FC<{ color: PieceColor; kind: HandPieceKind; count: number }> = ({ color, kind, count }) => {
   if (count === 0) return null;
   return (
     <div className='relative flex items-center justify-center' style={{ width: '100%', aspectRatio: '1' }}>
@@ -56,10 +52,10 @@ const ShogiBoard: React.FC<ShogiBoardProps> = ({ sfen, maxWidth = 520 }) => {
   const labelWidth = Math.round(maxWidth * 0.035);
 
   return (
-    <div className='flex items-stretch justify-center gap-1.5 sm:gap-2 select-none mx-auto' style={{ maxWidth }}>
+    <div className='flex items-stretch justify-center gap-2 select-none mx-auto' style={{ maxWidth }}>
       {/* Gote hand */}
       <div
-        className='flex-shrink-0 rounded-lg border border-border overflow-hidden flex flex-col'
+        className='flex-shrink-0 rounded-md border border-border overflow-hidden flex flex-col'
         style={{ width: handWidth, backgroundImage: 'url(/stand/wood_dark.png)', backgroundSize: 'cover' }}>
         <div className='text-center text-[10px] font-bold py-1 bg-black/30 text-white/90'>☗ 後手</div>
         <div className='flex-1 flex flex-col items-center gap-0.5 p-1.5'>
@@ -73,18 +69,14 @@ const ShogiBoard: React.FC<ShogiBoardProps> = ({ sfen, maxWidth = 520 }) => {
       <div className='flex-1 min-w-0'>
         <div className='flex' style={{ paddingLeft: labelWidth }}>
           {colLabels.map((n) => (
-            <div key={n} className='flex-1 text-center text-[11px] font-semibold text-muted-foreground leading-tight pb-0.5'>
-              {n}
-            </div>
+            <div key={n} className='flex-1 text-center text-[11px] text-muted-foreground pb-0.5'>{n}</div>
           ))}
         </div>
 
         <div className='flex'>
           <div className='flex flex-col' style={{ width: labelWidth }}>
             {RANK_KANJI.map((k) => (
-              <div key={k} className='flex-1 flex items-center justify-center text-[10px] text-muted-foreground'>
-                {k}
-              </div>
+              <div key={k} className='flex-1 flex items-center justify-center text-[10px] text-muted-foreground'>{k}</div>
             ))}
           </div>
 
@@ -118,7 +110,7 @@ const ShogiBoard: React.FC<ShogiBoardProps> = ({ sfen, maxWidth = 520 }) => {
 
       {/* Sente hand */}
       <div
-        className='flex-shrink-0 rounded-lg border border-border overflow-hidden flex flex-col'
+        className='flex-shrink-0 rounded-md border border-border overflow-hidden flex flex-col'
         style={{ width: handWidth, backgroundImage: 'url(/stand/wood_dark.png)', backgroundSize: 'cover' }}>
         <div className='flex-1 flex flex-col-reverse items-center gap-0.5 p-1.5'>
           {HAND_PIECE_DISPLAY.map(({ kind }) => (

@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, Image, X, Check, Copy } from 'lucide-react';
 import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
+import { Label } from '../components/ui/label';
+import { Separator } from '../components/ui/separator';
 import { toast } from 'sonner';
 import { addToHistory } from '../lib/history';
 import { useAuth } from '../lib/auth';
@@ -38,7 +39,7 @@ const ImageSfenizer: React.FC = () => {
         setCopiedCsa(true);
         setTimeout(() => setCopiedCsa(false), 2000);
       }
-      toast.success(`${type.toUpperCase()} copied to clipboard!`);
+      toast.success(`${type.toUpperCase()} copied!`);
     } catch {
       toast.error('Failed to copy to clipboard');
     }
@@ -90,10 +91,7 @@ const ImageSfenizer: React.FC = () => {
       const formData = new FormData();
       formData.append('file', selectedFile);
 
-      const response = await fetch(`${API_BASE_URL}/convert`, {
-        method: 'POST',
-        body: formData
-      });
+      const response = await fetch(`${API_BASE_URL}/convert`, { method: 'POST', body: formData });
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -136,19 +134,17 @@ const ImageSfenizer: React.FC = () => {
   };
 
   return (
-    <div className='py-8 md:py-10 max-w-3xl'>
+    <div className='py-8 max-w-3xl'>
       <div className='space-y-6'>
         <div>
           <h1 className='text-xl font-bold'>Image Sfenizer</h1>
-          <p className='text-xs text-muted-foreground'>
+          <p className='text-sm text-muted-foreground'>
             Upload a shogi board photo to extract SFEN/CSA notation
           </p>
         </div>
 
         <div
-          className={`rounded-lg border-2 border-dashed p-8 text-center outline-none ${
-            dragActive || selectedImage ? 'border-primary bg-primary/5' : 'border-border'
-          }`}
+          className={`rounded-md border-2 border-dashed p-8 text-center outline-none ${dragActive || selectedImage ? 'border-primary' : 'border-border'}`}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
@@ -160,7 +156,7 @@ const ImageSfenizer: React.FC = () => {
               <img
                 src={selectedImage}
                 alt='Selected'
-                className='mx-auto max-h-64 rounded-lg object-contain'
+                className='mx-auto max-h-64 rounded-md object-contain'
               />
               <Button
                 variant='secondary'
@@ -171,14 +167,9 @@ const ImageSfenizer: React.FC = () => {
               </Button>
             </div>
           ) : (
-            <div className='space-y-4'>
+            <div className='space-y-3'>
               <Image className='h-8 w-8 mx-auto text-muted-foreground' />
-              <div>
-                <p className='text-sm font-medium'>Drop your shogi board image here</p>
-                <p className='text-xs text-muted-foreground'>
-                  Or use one of the options below — Ctrl+V also works
-                </p>
-              </div>
+              <p className='text-sm'>Drop your shogi board image here</p>
               <div className='flex flex-wrap justify-center gap-2'>
                 <Button variant='outline' size='sm' onClick={() => fileInputRef.current?.click()}>
                   <Upload className='h-4 w-4 mr-2' />
@@ -188,9 +179,6 @@ const ImageSfenizer: React.FC = () => {
                   <Camera className='h-4 w-4 mr-2' />
                   Camera
                 </Button>
-                <span className='inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground'>
-                  Ctrl+V Paste
-                </span>
               </div>
             </div>
           )}
@@ -221,56 +209,56 @@ const ImageSfenizer: React.FC = () => {
         {result && (
           <div className='space-y-6'>
             <div>
-              <h3 className='text-base font-semibold flex items-center gap-2 mb-4'>
+              <p className='text-sm font-medium mb-3 flex items-center gap-2'>
                 <Check className='h-4 w-4 text-primary' />
                 Detected Board
-              </h3>
+              </p>
               <ShogiBoard sfen={result.sfen} maxWidth={520} />
             </div>
 
-            <Card>
-              <CardContent className='p-5 space-y-4'>
-                <div>
-                  <div className='flex items-center justify-between mb-2'>
-                    <label className='text-sm font-medium text-muted-foreground'>SFEN:</label>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      onClick={() => copyToClipboard(result.sfen, 'sfen')}
-                      className='h-8 w-8 p-0'>
-                      {copiedSfen ? (
-                        <Check className='h-4 w-4 text-green-500' />
-                      ) : (
-                        <Copy className='h-4 w-4' />
-                      )}
-                    </Button>
-                  </div>
-                  <div className='p-3 bg-muted rounded-md font-mono text-sm break-all'>
-                    {result.sfen}
-                  </div>
-                </div>
+            <Separator />
 
-                <div>
-                  <div className='flex items-center justify-between mb-2'>
-                    <label className='text-sm font-medium text-muted-foreground'>CSA:</label>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      onClick={() => copyToClipboard(result.csa, 'csa')}
-                      className='h-8 w-8 p-0'>
-                      {copiedCsa ? (
-                        <Check className='h-4 w-4 text-green-500' />
-                      ) : (
-                        <Copy className='h-4 w-4' />
-                      )}
-                    </Button>
-                  </div>
-                  <div className='p-3 bg-muted rounded-md font-mono text-sm whitespace-pre-wrap'>
-                    {result.csa}
-                  </div>
+            <div className='space-y-4'>
+              <div className='space-y-1'>
+                <div className='flex items-center justify-between'>
+                  <Label>SFEN</Label>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    className='h-7 w-7 p-0'
+                    onClick={() => copyToClipboard(result.sfen, 'sfen')}>
+                    {copiedSfen ? (
+                      <Check className='h-3 w-3 text-green-500' />
+                    ) : (
+                      <Copy className='h-3 w-3' />
+                    )}
+                  </Button>
                 </div>
-              </CardContent>
-            </Card>
+                <pre className='p-3 bg-muted rounded-md text-xs break-all whitespace-pre-wrap font-mono'>
+                  {result.sfen}
+                </pre>
+              </div>
+
+              <div className='space-y-1'>
+                <div className='flex items-center justify-between'>
+                  <Label>CSA</Label>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    className='h-7 w-7 p-0'
+                    onClick={() => copyToClipboard(result.csa, 'csa')}>
+                    {copiedCsa ? (
+                      <Check className='h-3 w-3 text-green-500' />
+                    ) : (
+                      <Copy className='h-3 w-3' />
+                    )}
+                  </Button>
+                </div>
+                <pre className='p-3 bg-muted rounded-md text-xs whitespace-pre-wrap font-mono'>
+                  {result.csa}
+                </pre>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -2,6 +2,8 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Camera, CameraOff, Copy, Check, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
+import { Label } from '../components/ui/label';
+import { Separator } from '../components/ui/separator';
 import { toast } from 'sonner';
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws/video`;
@@ -72,9 +74,7 @@ const VideoSfenizer: React.FC = () => {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    if (videoRef.current) videoRef.current.srcObject = null;
     setIsRunning(false);
     setIsConnecting(false);
   }, []);
@@ -100,20 +100,12 @@ const VideoSfenizer: React.FC = () => {
         setIsConnecting(false);
         intervalRef.current = setInterval(sendFrame, 300);
       };
-
-      ws.onmessage = (event) => {
-        const data: LiveResult = JSON.parse(event.data);
-        setLiveResult(data);
-      };
-
+      ws.onmessage = (event) => setLiveResult(JSON.parse(event.data));
       ws.onerror = () => {
         toast.error('WebSocket connection failed — is the backend running?');
         stopCamera();
       };
-
-      ws.onclose = () => {
-        stopCamera();
-      };
+      ws.onclose = () => stopCamera();
     } catch (err) {
       toast.error(
         'Camera access denied: ' + (err instanceof Error ? err.message : 'Unknown error')
@@ -122,16 +114,14 @@ const VideoSfenizer: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    return () => stopCamera();
-  }, [stopCamera]);
+  useEffect(() => () => stopCamera(), [stopCamera]);
 
   return (
-    <div className='py-4 md:py-10 max-w-2xl'>
+    <div className='py-8 max-w-2xl'>
       <div className='space-y-6'>
         <div>
           <h1 className='text-xl font-bold'>Video Sfenizer</h1>
-          <p className='text-xs text-muted-foreground'>Real-time shogi board detection</p>
+          <p className='text-sm text-muted-foreground'>Real-time shogi board detection</p>
         </div>
 
         <div className='relative bg-black sm:rounded-lg overflow-hidden min-h-[40vw]'>
@@ -196,54 +186,54 @@ const VideoSfenizer: React.FC = () => {
         </div>
 
         {liveResult && (
-          <Card>
-            <CardContent className='p-5 space-y-4'>
-              <h3 className='text-base font-semibold flex items-center gap-2'>
-                <span className='h-2 w-2 rounded-full bg-green-500 animate-pulse' />
-                Live Detection
-              </h3>
+          <div className='space-y-4'>
+            <div className='flex items-center gap-2'>
+              <span className='h-2 w-2 rounded-full bg-green-500 animate-pulse' />
+              <p className='text-sm font-medium'>Live Detection</p>
+            </div>
 
-              <div>
-                <div className='flex items-center justify-between mb-2'>
-                  <label className='text-sm font-medium text-muted-foreground'>SFEN:</label>
-                  <Button
-                    variant='ghost'
-                    size='sm'
-                    onClick={() => copyToClipboard(liveResult.sfen, 'sfen')}
-                    className='h-8 w-8 p-0'>
-                    {copiedSfen ? (
-                      <Check className='h-4 w-4 text-green-500' />
-                    ) : (
-                      <Copy className='h-4 w-4' />
-                    )}
-                  </Button>
-                </div>
-                <div className='p-3 bg-muted rounded-md font-mono text-sm break-all'>
-                  {liveResult.sfen}
-                </div>
-              </div>
+            <Separator />
 
-              <div>
-                <div className='flex items-center justify-between mb-2'>
-                  <label className='text-sm font-medium text-muted-foreground'>CSA:</label>
-                  <Button
-                    variant='ghost'
-                    size='sm'
-                    onClick={() => copyToClipboard(liveResult.csa, 'csa')}
-                    className='h-8 w-8 p-0'>
-                    {copiedCsa ? (
-                      <Check className='h-4 w-4 text-green-500' />
-                    ) : (
-                      <Copy className='h-4 w-4' />
-                    )}
-                  </Button>
-                </div>
-                <div className='p-3 bg-muted rounded-md font-mono text-sm whitespace-pre-wrap'>
-                  {liveResult.csa}
-                </div>
+            <div className='space-y-1'>
+              <div className='flex items-center justify-between'>
+                <Label>SFEN</Label>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='h-7 w-7 p-0'
+                  onClick={() => copyToClipboard(liveResult.sfen, 'sfen')}>
+                  {copiedSfen ? (
+                    <Check className='h-3 w-3 text-green-500' />
+                  ) : (
+                    <Copy className='h-3 w-3' />
+                  )}
+                </Button>
               </div>
-            </CardContent>
-          </Card>
+              <pre className='p-3 bg-muted rounded-md text-xs break-all whitespace-pre-wrap font-mono'>
+                {liveResult.sfen}
+              </pre>
+            </div>
+
+            <div className='space-y-1'>
+              <div className='flex items-center justify-between'>
+                <Label>CSA</Label>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='h-7 w-7 p-0'
+                  onClick={() => copyToClipboard(liveResult.csa, 'csa')}>
+                  {copiedCsa ? (
+                    <Check className='h-3 w-3 text-green-500' />
+                  ) : (
+                    <Copy className='h-3 w-3' />
+                  )}
+                </Button>
+              </div>
+              <pre className='p-3 bg-muted rounded-md text-xs whitespace-pre-wrap font-mono'>
+                {liveResult.csa}
+              </pre>
+            </div>
+          </div>
         )}
       </div>
     </div>

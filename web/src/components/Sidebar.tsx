@@ -13,24 +13,19 @@ const Sidebar: React.FC = () => {
   const location = useLocation();
 
   return (
-    <aside className='hidden md:flex flex-col w-52 flex-shrink-0 py-6'>
+    <aside className='hidden md:flex flex-col w-48 flex-shrink-0 py-6'>
       <nav className='flex flex-col gap-0.5'>
-        {sidebarLinks.map(({ to, label, icon: Icon }) => {
-          const isActive = location.pathname === to;
-          return (
-            <Link
-              key={to}
-              to={to}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                isActive
-                  ? 'text-primary bg-primary/5'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}>
-              <Icon className='h-[18px] w-[18px]' />
-              {label}
-            </Link>
-          );
-        })}
+        {sidebarLinks.map(({ to, label, icon: Icon }) => (
+          <Link
+            key={to}
+            to={to}
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
+              location.pathname === to ? 'text-primary font-medium' : 'text-muted-foreground'
+            }`}>
+            <Icon className='h-4 w-4' />
+            {label}
+          </Link>
+        ))}
       </nav>
     </aside>
   );

@@ -3,15 +3,16 @@ import { Link } from 'react-router-dom';
 import { Trash2, Copy, Check, Clock, LogIn } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
+import { Separator } from '../components/ui/separator';
 import { toast } from 'sonner';
 import { getHistory, removeFromHistory, clearHistory, type HistoryItem } from '../lib/history';
 import { useAuth } from '../lib/auth';
 import { formatRelativeTime } from '../lib/dates';
 
-const HistoryCard: React.FC<{
-  item: HistoryItem;
-  onRemove: (id: string) => void;
-}> = ({ item, onRemove }) => {
+const HistoryCard: React.FC<{ item: HistoryItem; onRemove: (id: string) => void }> = ({
+  item,
+  onRemove
+}) => {
   const [copiedSfen, setCopiedSfen] = useState(false);
   const [copiedCsa, setCopiedCsa] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -39,70 +40,46 @@ const HistoryCard: React.FC<{
           <img
             src={item.thumbnail}
             alt='Board'
-            className='h-16 w-16 rounded-md object-cover flex-shrink-0 border border-border cursor-pointer'
+            className='h-16 w-16 rounded-md object-cover border border-border cursor-pointer'
             onClick={() => setExpanded((prev) => !prev)}
           />
-
           <div className='flex-1 min-w-0'>
-            <div className='flex items-center justify-between gap-2'>
+            <div className='flex items-center justify-between'>
               <span className='flex items-center gap-1 text-xs text-muted-foreground'>
                 <Clock className='h-3 w-3' />
                 {formatRelativeTime(item.timestamp)}
               </span>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='h-7 w-7 p-0'
-                onClick={() => onRemove(item.id)}>
+              <Button variant='ghost' size='sm' className='h-7 w-7 p-0' onClick={() => onRemove(item.id)}>
                 <Trash2 className='h-4 w-4' />
               </Button>
             </div>
 
-            <div className='mt-1 flex items-center gap-2'>
+            <div className='flex items-center gap-2 mt-1'>
               <p className='font-mono text-xs truncate flex-1'>{item.sfen}</p>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='h-6 w-6 p-0 flex-shrink-0'
-                onClick={() => copy(item.sfen, 'sfen')}>
-                {copiedSfen ? (
-                  <Check className='h-3 w-3 text-green-500' />
-                ) : (
-                  <Copy className='h-3 w-3' />
-                )}
+              <Button variant='ghost' size='sm' className='h-6 w-6 p-0' onClick={() => copy(item.sfen, 'sfen')}>
+                {copiedSfen ? <Check className='h-3 w-3 text-green-500' /> : <Copy className='h-3 w-3' />}
               </Button>
             </div>
 
             <div className='flex items-center gap-2'>
               <p className='text-xs text-muted-foreground truncate flex-1'>CSA notation</p>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='h-6 w-6 p-0 flex-shrink-0'
-                onClick={() => copy(item.csa, 'csa')}>
-                {copiedCsa ? (
-                  <Check className='h-3 w-3 text-green-500' />
-                ) : (
-                  <Copy className='h-3 w-3' />
-                )}
+              <Button variant='ghost' size='sm' className='h-6 w-6 p-0' onClick={() => copy(item.csa, 'csa')}>
+                {copiedCsa ? <Check className='h-3 w-3 text-green-500' /> : <Copy className='h-3 w-3' />}
               </Button>
             </div>
           </div>
         </div>
 
         {expanded && (
-          <img
-            src={item.thumbnail}
-            alt='Board large'
-            className='w-full rounded-md object-contain max-h-72 border border-border cursor-pointer'
-            onClick={() => setExpanded(false)}
-          />
-        )}
-
-        {expanded && (
-          <div className='p-3 bg-muted rounded-md font-mono text-xs whitespace-pre-wrap'>
-            {item.csa}
-          </div>
+          <>
+            <img
+              src={item.thumbnail}
+              alt='Board large'
+              className='w-full rounded-md object-contain max-h-72 border border-border cursor-pointer'
+              onClick={() => setExpanded(false)}
+            />
+            <pre className='p-3 bg-muted rounded-md text-xs whitespace-pre-wrap font-mono'>{item.csa}</pre>
+          </>
         )}
       </CardContent>
     </Card>
@@ -127,55 +104,33 @@ const History: React.FC = () => {
     setIsLoading(true);
     getHistory()
       .then((historyItems) => {
-        if (active) {
-          setItems(historyItems);
-          setLoadError(null);
-        }
+        if (active) { setItems(historyItems); setLoadError(null); }
       })
       .catch((error) => {
-        if (active) {
-          setLoadError(error instanceof Error ? error.message : 'Failed to load history');
-        }
+        if (active) setLoadError(error instanceof Error ? error.message : 'Failed to load history');
       })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
+      .finally(() => { if (active) setIsLoading(false); });
 
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [isAuthenticated]);
 
   if (isAuthLoading || isLoading) {
     return (
-      <div className='py-8 md:py-10 max-w-2xl'>
-        <Card>
-          <CardContent className='p-6'>
-            <div className='h-5 w-32 rounded bg-muted mb-4' />
-            <div className='h-24 rounded bg-muted' />
-          </CardContent>
-        </Card>
+      <div className='py-8 max-w-2xl'>
+        <Card><CardContent className='p-6'><p className='text-sm text-muted-foreground'>Loading…</p></CardContent></Card>
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className='py-8 md:py-10 max-w-2xl'>
+      <div className='py-8 max-w-2xl'>
         <Card>
           <CardContent className='p-6 text-center space-y-4'>
-            <Clock className='h-12 w-12 mx-auto opacity-20' />
-            <div>
-              <h1 className='text-xl font-bold text-foreground'>History is saved on the server</h1>
-              <p className='text-sm text-muted-foreground'>
-                Sign in to see your conversions and keep them across sessions.
-              </p>
-            </div>
+            <p className='font-semibold'>History is saved on the server</p>
+            <p className='text-sm text-muted-foreground'>Sign in to see your conversions.</p>
             <Button asChild>
-              <Link to='/login'>
-                <LogIn className='h-4 w-4 mr-2' />
-                Log in
-              </Link>
+              <Link to='/login'><LogIn className='h-4 w-4 mr-2' />Log in</Link>
             </Button>
           </CardContent>
         </Card>
@@ -185,64 +140,49 @@ const History: React.FC = () => {
 
   if (loadError) {
     return (
-      <div className='py-8 md:py-10 max-w-2xl'>
-        <Card>
-          <CardContent className='p-6 text-center space-y-4'>
-            <Clock className='h-12 w-12 mx-auto opacity-20' />
-            <p className='text-sm text-muted-foreground'>{loadError}</p>
-          </CardContent>
-        </Card>
+      <div className='py-8 max-w-2xl'>
+        <Card><CardContent className='p-6'><p className='text-sm text-muted-foreground'>{loadError}</p></CardContent></Card>
       </div>
     );
   }
 
   const handleRemove = (id: string) => {
     removeFromHistory(id)
-      .then(() => {
-        setItems((prev) => prev.filter((item) => item.id !== id));
-        toast.success('Entry removed');
-      })
+      .then(() => { setItems((prev) => prev.filter((item) => item.id !== id)); toast.success('Entry removed'); })
       .catch(() => toast.error('Failed to remove entry'));
   };
 
   const handleClear = () => {
     clearHistory()
-      .then(() => {
-        setItems([]);
-        toast.success('History cleared');
-      })
+      .then(() => { setItems([]); toast.success('History cleared'); })
       .catch(() => toast.error('Failed to clear history'));
   };
 
   return (
-    <div className='py-8 md:py-10 max-w-2xl'>
-      <div className='space-y-6'>
+    <div className='py-8 max-w-2xl'>
+      <div className='space-y-4'>
         <div className='flex items-center justify-between'>
           <div>
             <h1 className='text-xl font-bold'>History</h1>
             <p className='text-xs text-muted-foreground'>
-              {items.length} conversion{items.length !== 1 ? 's' : ''} saved on the server
+              {items.length} conversion{items.length !== 1 ? 's' : ''} on server
             </p>
           </div>
           {items.length > 0 && (
             <Button variant='outline' size='sm' onClick={handleClear}>
-              <Trash2 className='h-4 w-4 mr-2' />
-              Clear All
+              <Trash2 className='h-4 w-4 mr-2' />Clear All
             </Button>
           )}
         </div>
 
+        <Separator />
+
         {items.length === 0 ? (
-          <Card>
-            <CardContent className='p-0'>
-              <div className='text-center py-16 text-muted-foreground'>
-                <Clock className='h-12 w-12 mx-auto mb-3 opacity-20' />
-                <p className='text-sm'>No conversions yet.</p>
-              </div>
-            </CardContent>
-          </Card>
+          <p className='text-sm text-muted-foreground py-8 text-center'>
+            No conversions yet — head to Image Sfenizer to get started.
+          </p>
         ) : (
-          <div className='space-y-4'>
+          <div className='space-y-3'>
             {items.map((item) => (
               <HistoryCard key={item.id} item={item} onRemove={handleRemove} />
             ))}
