@@ -29,53 +29,45 @@ const NavBar: React.FC = () => {
   };
 
   return (
-    <nav className='border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50 animate-fade-down'>
+    <nav className='border-b border-border bg-card sticky top-0 z-50'>
       <div className='mx-auto max-w-7xl px-4 sm:px-6 lg:px-8'>
         <div className='flex h-14 items-center justify-between'>
-          {/* Brand */}
-          <Link to='/' className='flex items-center gap-2.5 group'>
-            <div className='flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3'>
-              <img src='/piece/hitomoji_wood/black_pawn.png' alt='Logo' className='h-8' />
-            </div>
-            <span className='font-brand text-lg font-bold text-foreground tracking-tight'>
-              Sfenizer
-            </span>
+          <Link to='/' className='flex items-center gap-2'>
+            <img src='/piece/hitomoji_wood/black_pawn.png' alt='Logo' className='h-8' />
+            <span className='font-brand text-lg font-bold'>Sfenizer</span>
           </Link>
 
-          {/* Desktop nav pills */}
           <div className='hidden md:flex items-center gap-1'>
-            {navLinks.map((link, i) => {
+            {navLinks.map((link) => {
               const isActive = location.pathname === link.to;
               return (
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all duration-200 animate-fade-in ${
+                  className={`px-3.5 py-1.5 rounded-full text-sm font-medium ${
                     isActive
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 hover:scale-105 active:scale-95'
-                  }`}
-                  style={{ animationDelay: `${100 + i * 50}ms` }}>
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}>
                   {link.label}
                 </Link>
               );
             })}
           </div>
 
-          {/* Right side placeholder + mobile hamburger */}
           <div className='flex items-center gap-2'>
             {!isLoading && isAuthenticated ? (
               <div className='hidden sm:flex items-center gap-2'>
                 <span className='text-xs text-muted-foreground'>Signed in as {user?.username}</span>
-                <Button variant='outline' size='sm' className='gap-2' onClick={handleLogout}>
-                  <LogOut className='h-4 w-4' />
+                <Button variant='outline' size='sm' onClick={handleLogout}>
+                  <LogOut className='h-4 w-4 mr-2' />
                   Logout
                 </Button>
               </div>
             ) : (
-              <Button variant='outline' size='sm' className='hidden sm:flex gap-2' asChild>
+              <Button variant='outline' size='sm' className='hidden sm:flex' asChild>
                 <Link to='/login'>
-                  <LogIn className='h-4 w-4' />
+                  <LogIn className='h-4 w-4 mr-2' />
                   Login
                 </Link>
               </Button>
@@ -91,23 +83,19 @@ const NavBar: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile menu */}
       {menuOpen && (
-        <div className='md:hidden border-t border-border bg-card animate-fade-down overflow-hidden'>
+        <div className='md:hidden border-t border-border bg-card'>
           <div className='px-4 py-2 space-y-0.5'>
-            {navLinks.map(({ to, label, icon: Icon }, i) => {
+            {navLinks.map(({ to, label, icon: Icon }) => {
               const isActive = location.pathname === to;
               return (
                 <Link
                   key={to}
                   to={to}
                   onClick={() => setMenuOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 animate-fade-up active:scale-[0.98] ${
-                    isActive
-                      ? 'text-primary bg-primary/5'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  }`}
-                  style={{ animationDelay: `${i * 50}ms` }}>
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
+                    isActive ? 'text-primary bg-primary/5' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}>
                   <Icon className='h-[18px] w-[18px]' />
                   {label}
                 </Link>
@@ -115,18 +103,14 @@ const NavBar: React.FC = () => {
             })}
             <div className='pt-2 mt-2 border-t border-border'>
               {!isLoading && isAuthenticated ? (
-                <Button
-                  variant='outline'
-                  size='sm'
-                  className='w-full justify-start gap-2'
-                  onClick={handleLogout}>
-                  <LogOut className='h-4 w-4' />
+                <Button variant='outline' size='sm' className='w-full justify-start' onClick={handleLogout}>
+                  <LogOut className='h-4 w-4 mr-2' />
                   Logout{user?.username ? ` (${user.username})` : ''}
                 </Button>
               ) : (
-                <Button variant='outline' size='sm' className='w-full justify-start gap-2' asChild>
+                <Button variant='outline' size='sm' className='w-full justify-start' asChild>
                   <Link to='/login' onClick={() => setMenuOpen(false)}>
-                    <LogIn className='h-4 w-4' />
+                    <LogIn className='h-4 w-4 mr-2' />
                     Login
                   </Link>
                 </Button>

@@ -24,7 +24,6 @@ const VideoSfenizer: React.FC = () => {
   const [liveResult, setLiveResult] = useState<LiveResult | null>(null);
   const [copiedSfen, setCopiedSfen] = useState(false);
   const [copiedCsa, setCopiedCsa] = useState(false);
-  // toggle between video preview and annotated frame
   const [showAnnotated, setShowAnnotated] = useState(true);
 
   const copyToClipboard = async (text: string, type: 'sfen' | 'csa') => {
@@ -84,11 +83,7 @@ const VideoSfenizer: React.FC = () => {
     setIsConnecting(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
       streamRef.current = stream;
 
@@ -103,7 +98,6 @@ const VideoSfenizer: React.FC = () => {
       ws.onopen = () => {
         setIsRunning(true);
         setIsConnecting(false);
-        // Send a frame every 300ms (≈3fps) — enough for real-time without overloading
         intervalRef.current = setInterval(sendFrame, 300);
       };
 
@@ -128,103 +122,82 @@ const VideoSfenizer: React.FC = () => {
     }
   };
 
-  // Clean up on unmount
   useEffect(() => {
     return () => stopCamera();
   }, [stopCamera]);
 
   return (
-    <div className='py-4 md:py-10 max-w-2xl page-enter'>
+    <div className='py-4 md:py-10 max-w-2xl'>
       <div className='space-y-6'>
-        <div className='flex items-center gap-3 animate-fade-up'>
-          <div className='h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center'>
-            <Camera className='h-5 w-5 text-primary' />
-          </div>
-          <div>
-            <h1 className='text-xl font-bold text-foreground'>Video Sfenizer</h1>
-            <p className='text-xs text-muted-foreground'>
-              Real-time shogi board detection — point your camera at the board
-            </p>
-          </div>
+        <div>
+          <h1 className='text-xl font-bold'>Video Sfenizer</h1>
+          <p className='text-xs text-muted-foreground'>Real-time shogi board detection</p>
         </div>
 
-        {/* Camera / annotated feed */}
-        <Card className='-mx-4 sm:mx-0 overflow-hidden border-border/60 animate-fade-up delay-100'>
-          <CardContent className='p-0'>
-            <div className='relative bg-black sm:rounded-lg overflow-hidden min-h-[40vw]'>
-              {/* Live camera preview (always rendered so the stream stays alive) */}
-              <video
-                ref={videoRef}
-                playsInline
-                muted
-                className={`w-full block ${showAnnotated && liveResult ? 'hidden' : ''}`}
-              />
+        <div className='relative bg-black sm:rounded-lg overflow-hidden min-h-[40vw]'>
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className={`w-full block ${showAnnotated && liveResult ? 'hidden' : ''}`}
+          />
 
-              {/* Annotated frame from backend */}
-              {showAnnotated && liveResult && (
-                <img
-                  src={`data:image/jpeg;base64,${liveResult.frame}`}
-                  alt='Annotated'
-                  className='w-full block'
-                />
-              )}
+          {showAnnotated && liveResult && (
+            <img
+              src={`data:image/jpeg;base64,${liveResult.frame}`}
+              alt='Annotated'
+              className='w-full block'
+            />
+          )}
 
-              {/* Placeholder when camera is off */}
-              {!isRunning && !isConnecting && (
-                <div className='absolute inset-0 flex flex-col items-center justify-center text-muted-foreground bg-muted/30'>
-                  <CameraOff className='h-12 w-12 mb-3 opacity-30' />
-                  <p className='text-sm'>Camera not started</p>
-                </div>
-              )}
-
-              {isConnecting && (
-                <div className='absolute inset-0 flex flex-col items-center justify-center text-muted-foreground'>
-                  <RefreshCw className='h-10 w-10 mb-3 animate-spin opacity-60' />
-                  <p className='text-sm'>Connecting…</p>
-                </div>
-              )}
-
-              {/* Toggle overlay */}
-              {isRunning && liveResult && (
-                <button
-                  onClick={() => setShowAnnotated((prev) => !prev)}
-                  className='absolute top-2 right-2 rounded-md bg-black/50 px-2 py-1 text-xs text-white hover:bg-black/70 transition-colors'>
-                  {showAnnotated ? 'Show Raw' : 'Show Detected'}
-                </button>
-              )}
+          {!isRunning && !isConnecting && (
+            <div className='absolute inset-0 flex flex-col items-center justify-center text-muted-foreground'>
+              <CameraOff className='h-12 w-12 mb-3 opacity-30' />
+              <p className='text-sm'>Camera not started</p>
             </div>
-          </CardContent>
-        </Card>
+          )}
 
-        {/* Hidden canvas for frame capture */}
+          {isConnecting && (
+            <div className='absolute inset-0 flex flex-col items-center justify-center text-muted-foreground'>
+              <RefreshCw className='h-10 w-10 mb-3 animate-spin opacity-60' />
+              <p className='text-sm'>Connecting…</p>
+            </div>
+          )}
+
+          {isRunning && liveResult && (
+            <button
+              onClick={() => setShowAnnotated((prev) => !prev)}
+              className='absolute top-2 right-2 rounded-md bg-black/50 px-2 py-1 text-xs text-white'>
+              {showAnnotated ? 'Show Raw' : 'Show Detected'}
+            </button>
+          )}
+        </div>
+
         <canvas ref={canvasRef} className='hidden' />
 
-        {/* Controls */}
-        <div className='flex justify-center animate-fade-up delay-200'>
+        <div className='flex justify-center'>
           <Button
             onClick={isRunning ? stopCamera : startCamera}
             disabled={isConnecting}
             size='lg'
-            variant={isRunning ? 'destructive' : 'default'}
-            className='gap-2 px-8 transition-transform duration-200 hover:scale-105 active:scale-95'>
+            variant={isRunning ? 'destructive' : 'default'}>
             {isRunning ? (
               <>
-                <CameraOff className='h-5 w-5' />
+                <CameraOff className='h-5 w-5 mr-2' />
                 Stop Camera
               </>
             ) : (
               <>
-                <Camera className='h-5 w-5' />
+                <Camera className='h-5 w-5 mr-2' />
                 {isConnecting ? 'Connecting…' : 'Start Camera'}
               </>
             )}
           </Button>
         </div>
 
-        {/* Live SFEN / CSA */}
         {liveResult && (
-          <Card className='border-primary/20 animate-scale-in'>
-            <CardContent className='p-5 sm:p-6 space-y-4'>
+          <Card>
+            <CardContent className='p-5 space-y-4'>
               <h3 className='text-base font-semibold flex items-center gap-2'>
                 <span className='h-2 w-2 rounded-full bg-green-500 animate-pulse' />
                 Live Detection

@@ -136,123 +136,90 @@ const ImageSfenizer: React.FC = () => {
   };
 
   return (
-    <div className='py-8 md:py-10 max-w-3xl page-enter'>
+    <div className='py-8 md:py-10 max-w-3xl'>
       <div className='space-y-6'>
-        <div className='flex items-center gap-3 animate-fade-up'>
-          <div className='h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center'>
-            <Image className='h-5 w-5 text-primary' />
-          </div>
-          <div>
-            <h1 className='text-xl font-bold text-foreground'>Image Sfenizer</h1>
-            <p className='text-xs text-muted-foreground'>
-              Upload a shogi board photo to extract SFEN/CSA notation
-            </p>
-          </div>
+        <div>
+          <h1 className='text-xl font-bold'>Image Sfenizer</h1>
+          <p className='text-xs text-muted-foreground'>
+            Upload a shogi board photo to extract SFEN/CSA notation
+          </p>
         </div>
 
-        {/* Drop zone */}
-        <Card className='overflow-hidden border-none shadow-none animate-fade-up delay-100'>
-          <CardContent className='p-0'>
-            <div
-              className={`relative rounded-lg border-2 border-dashed p-8 text-center transition-all duration-300 outline-none ${
-                dragActive
-                  ? 'border-primary bg-primary/5'
-                  : selectedImage
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border bg-card hover:border-primary/50 hover:bg-primary/5'
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              onPaste={handlePaste}
-              tabIndex={0}>
-              {selectedImage ? (
-                <div className='space-y-4'>
-                  <div className='relative inline-block'>
-                    <img
-                      src={selectedImage}
-                      alt='Selected'
-                      className='mx-auto max-h-64 rounded-lg object-contain animate-scale-in'
-                    />
-                    <Button
-                      variant='secondary'
-                      size='sm'
-                      className='absolute -top-2 -right-2 h-6 w-6 rounded-full p-0'
-                      onClick={clearImage}>
-                      <X className='h-3 w-3' />
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className='space-y-4'>
-                  <div className='mx-auto h-12 w-12 rounded-lg bg-muted flex items-center justify-center'>
-                    <Image className='h-6 w-6 text-muted-foreground' />
-                  </div>
-                  <div className='space-y-1'>
-                    <p className='text-lg font-medium text-foreground'>
-                      Drop your shogi board image here
-                    </p>
-                    <p className='text-sm text-muted-foreground'>
-                      Or use one of the options below — Ctrl+V also works
-                    </p>
-                  </div>
-                  <div className='flex flex-wrap justify-center gap-3'>
-                    <Button
-                      variant='outline'
-                      onClick={() => fileInputRef.current?.click()}
-                      className='gap-2'>
-                      <Upload className='h-4 w-4' />
-                      Select File
-                    </Button>
-                    <Button
-                      variant='outline'
-                      onClick={() => cameraInputRef.current?.click()}
-                      className='gap-2'>
-                      <Camera className='h-4 w-4' />
-                      Camera
-                    </Button>
-                    <div className='inline-flex items-center gap-2 rounded-md border border-border bg-muted px-4 py-2 text-sm font-medium text-muted-foreground'>
-                      <span>Ctrl+V</span>
-                      <span className='text-xs'>Paste</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <input
-                ref={fileInputRef}
-                type='file'
-                accept='image/*'
-                onChange={(e) => e.target.files?.[0] && handleFiles(e.target.files[0])}
-                className='hidden'
+        <div
+          className={`rounded-lg border-2 border-dashed p-8 text-center outline-none ${
+            dragActive || selectedImage ? 'border-primary bg-primary/5' : 'border-border'
+          }`}
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+          onPaste={handlePaste}
+          tabIndex={0}>
+          {selectedImage ? (
+            <div className='relative inline-block'>
+              <img
+                src={selectedImage}
+                alt='Selected'
+                className='mx-auto max-h-64 rounded-lg object-contain'
               />
-              <input
-                ref={cameraInputRef}
-                type='file'
-                accept='image/*'
-                capture='environment'
-                onChange={(e) => e.target.files?.[0] && handleFiles(e.target.files[0])}
-                className='hidden'
-              />
+              <Button
+                variant='secondary'
+                size='sm'
+                className='absolute -top-2 -right-2 h-6 w-6 rounded-full p-0'
+                onClick={clearImage}>
+                <X className='h-3 w-3' />
+              </Button>
             </div>
-          </CardContent>
-        </Card>
+          ) : (
+            <div className='space-y-4'>
+              <Image className='h-8 w-8 mx-auto text-muted-foreground' />
+              <div>
+                <p className='text-sm font-medium'>Drop your shogi board image here</p>
+                <p className='text-xs text-muted-foreground'>
+                  Or use one of the options below — Ctrl+V also works
+                </p>
+              </div>
+              <div className='flex flex-wrap justify-center gap-2'>
+                <Button variant='outline' size='sm' onClick={() => fileInputRef.current?.click()}>
+                  <Upload className='h-4 w-4 mr-2' />
+                  Select File
+                </Button>
+                <Button variant='outline' size='sm' onClick={() => cameraInputRef.current?.click()}>
+                  <Camera className='h-4 w-4 mr-2' />
+                  Camera
+                </Button>
+                <span className='inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground'>
+                  Ctrl+V Paste
+                </span>
+              </div>
+            </div>
+          )}
 
-        <div className='flex justify-center animate-fade-up delay-200'>
-          <Button
-            onClick={handleConvert}
-            disabled={!selectedFile || isLoading}
-            size='lg'
-            className='px-8 transition-transform duration-200 hover:scale-105 active:scale-95'>
+          <input
+            ref={fileInputRef}
+            type='file'
+            accept='image/*'
+            onChange={(e) => e.target.files?.[0] && handleFiles(e.target.files[0])}
+            className='hidden'
+          />
+          <input
+            ref={cameraInputRef}
+            type='file'
+            accept='image/*'
+            capture='environment'
+            onChange={(e) => e.target.files?.[0] && handleFiles(e.target.files[0])}
+            className='hidden'
+          />
+        </div>
+
+        <div className='flex justify-center'>
+          <Button onClick={handleConvert} disabled={!selectedFile || isLoading} size='lg'>
             {isLoading ? 'Converting…' : 'Convert to SFEN/CSA'}
           </Button>
         </div>
 
-        {/* Results */}
         {result && (
-          <div className='space-y-6 animate-scale-in'>
-            {/* Board visualization */}
+          <div className='space-y-6'>
             <div>
               <h3 className='text-base font-semibold flex items-center gap-2 mb-4'>
                 <Check className='h-4 w-4 text-primary' />
@@ -261,9 +228,8 @@ const ImageSfenizer: React.FC = () => {
               <ShogiBoard sfen={result.sfen} maxWidth={520} />
             </div>
 
-            {/* Notation */}
-            <Card className='border-primary/20'>
-              <CardContent className='p-5 sm:p-6 space-y-4'>
+            <Card>
+              <CardContent className='p-5 space-y-4'>
                 <div>
                   <div className='flex items-center justify-between mb-2'>
                     <label className='text-sm font-medium text-muted-foreground'>SFEN:</label>
